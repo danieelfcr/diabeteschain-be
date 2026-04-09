@@ -3,6 +3,7 @@ const express = require('express');
 const healthRoutes = require('./src/routes/health');
 const clinicalRecordRoutes = require('./src/routes/clinicalRecord.routes');
 const { connectDatabase } = require('./src/config/mongo');
+const { initializeIdentityDatabase } = require('./src/config/identity_database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +22,7 @@ app.use((req, res) => {
 
 const startServer = async () => {
   await connectDatabase();
+  await initializeIdentityDatabase();
   app.listen(PORT, () => {
     console.log(`Servidor escuchando en http://localhost:${PORT}`);
   });
