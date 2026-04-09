@@ -19,6 +19,14 @@ class IdentityRepository {
 
   async findByEmail(email) {
     try {
+      return await this.findAuthUserByEmail(email);
+    } catch (error) {
+      throw new Error(`Error finding user by email: ${error.message}`);
+    }
+  }
+
+  async findAuthUserByEmail(email) {
+    try {
       const user = await User.findOne({
         where: { email },
         include: [
@@ -28,7 +36,7 @@ class IdentityRepository {
       });
       return user;
     } catch (error) {
-      throw new Error(`Error finding user by email: ${error.message}`);
+      throw new Error(`Error finding auth user by email: ${error.message}`);
     }
   }
 

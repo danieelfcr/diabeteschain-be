@@ -1,4 +1,4 @@
-const IdentityService = require('../services/identity.service');
+const IdentityService = require('../services/identity/identity.service');
 
 class IdentityController {
   constructor() {
@@ -55,6 +55,34 @@ class IdentityController {
       }
       console.error('Error registering user:', error);
       res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  async login(req, res) {
+    try {
+      const { email, password } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: 'Missing required field: email' });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: 'Missing required field: password' });
+      }
+
+      const user = await this.identityService.loginUser({ email, password });
+
+      return res.status(200).json({
+        message: 'Login successful',
+        user,
+      });
+    } catch (error) {
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      console.error('Error logging in user:', error);
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 }
