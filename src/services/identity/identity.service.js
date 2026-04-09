@@ -3,11 +3,21 @@ const crypto = require('crypto');
 const { Role, Status } = require('../../models/persistence/user.schema');
 const IdentityRepository = require('../../repositories/identity.repository');
 
+/**
+ * Service responsible for identity-related business logic.
+ * Handles user registration, authentication, and sanitization of user objects.
+ */
 class IdentityService {
   constructor() {
     this.repository = new IdentityRepository();
   }
 
+  /**
+   * Remove sensitive fields from a user object before returning it to the caller.
+   *
+   * @param {Object} user - The user object returned from persistence.
+   * @returns {Object} Sanitized user object without secret data.
+   */
   sanitizeUser(user) {
     return {
       id: user.id,
@@ -22,22 +32,37 @@ class IdentityService {
     };
   }
 
+  /**
+   * Create a structured authentication error with an HTTP status code.
+   *
+   * @param {string} message - The error message to return.
+   * @param {number} statusCode - HTTP status code associated with the error.
+   * @returns {Error} Error object with a statusCode property.
+   */
   createAuthError(message, statusCode) {
     const error = new Error(message);
     error.statusCode = statusCode;
     return error;
   }
 
+  /**
+   * Register a new user in the system.
+   * Validates role membership, uniqueness of email, and handles password hashing.
+   *
+   * @param {Object} userData - The user data submitted for registration.
+   * @returns {Promise<Object>} The created user record with associations.
+   * @throws {Error} When validation or persistence fails.
+   */
   async registerUser(userData) {
     const { role, professional_id, email, password, ...otherFields } = userData;
 
-    // Validar rol
+    // Validate that the provided role is permitted for registration.
     const allowedRoles = ['PATIENT', 'DOCTOR', 'PHARMACIST', 'LABORATORY'];
     if (!allowedRoles.includes(role)) {
       throw new Error('Invalid role. Allowed roles: PATIENT, DOCTOR, PHARMACIST, LABORATORY');
     }
 
-    // Lógica para pseudo_id y professional_id
+    // Assign a pseudo_id only for patients; other roles must provide a professional identifier.
     let pseudo_id = null;
     if (role === 'PATIENT') {
       pseudo_id = crypto.randomUUID();
@@ -47,31 +72,30 @@ class IdentityService {
       }
     }
 
-    // Verificar email único
+    // Ensure the email address is not already used by another account.
     const existingUser = await this.repository.findByEmail(email);
     if (existingUser) {
       throw new Error('Email already exists');
     }
 
-    // Hashear contraseña
+    // Hash the password before persisting it.
     const saltRounds = 10;
     const password_hash = await bcrypt.hash(password, saltRounds);
 
-    // Obtener role_id
+    // Resolve role and status references from catalog tables.
     const roleRecord = await Role.findOne({ where: { name: role } });
     if (!roleRecord) {
       throw new Error('Role not found');
     }
     const role_id = roleRecord.id;
 
-    // Obtener status_id para ACTIVE
     const statusRecord = await Status.findOne({ where: { name: 'ACTIVE' } });
     if (!statusRecord) {
       throw new Error('Status ACTIVE not found');
     }
     const status_id = statusRecord.id;
 
-    // Preparar datos para crear usuario
+    // Compose the payload to persist a new user.
     const newUserData = {
       ...otherFields,
       pseudo_id,
@@ -82,11 +106,20 @@ class IdentityService {
       status_id,
     };
 
-    // Crear usuario
+    // Persist the user record and return the resulting object.
     const user = await this.repository.createUser(newUserData);
     return user;
   }
 
+  /**
+   * Authenticate a user with email and password.
+   *
+   * @param {Object} credentials - The login credentials.
+   * @param {string} credentials.email - The user email address.
+   * @param {string} credentials.password - The plaintext password.
+   * @returns {Promise<Object>} The sanitized authenticated user.
+   * @throws {Error} When authentication fails.
+   */
   async loginUser(credentials) {
     const { email, password } = credentials;
 

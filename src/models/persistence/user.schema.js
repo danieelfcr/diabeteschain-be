@@ -1,6 +1,9 @@
 const { Sequelize, DataTypes } = require('sequelize');
 const path = require('path');
 
+/**
+ * Sequelize instance configured for the identity persistence store.
+ */
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: path.join(__dirname, '../../../data/Identity.sqlite'),
@@ -11,7 +14,10 @@ const sequelize = new Sequelize({
   },
 });
 
-// Role Catalog
+/**
+ * Catalog table for user roles.
+ * Defines valid role names for identity users.
+ */
 const Role = sequelize.define(
   'Role',
   {
@@ -32,7 +38,10 @@ const Role = sequelize.define(
   }
 );
 
-// Status Catalog
+/**
+ * Catalog table for user statuses.
+ * Defines valid state values for identity users.
+ */
 const Status = sequelize.define(
   'Status',
   {
@@ -53,7 +62,10 @@ const Status = sequelize.define(
   }
 );
 
-// User Model
+/**
+ * User model representing identity domain users.
+ * Includes personal information, authentication metadata, and references to role/status.
+ */
 const User = sequelize.define(
   'User',
   {
@@ -158,7 +170,7 @@ const User = sequelize.define(
   }
 );
 
-// Associations
+// Define associations between user, role, and status models.
 User.belongsTo(Role, {
   foreignKey: 'role_id',
   as: 'role',

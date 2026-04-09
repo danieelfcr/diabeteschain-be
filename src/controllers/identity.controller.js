@@ -1,15 +1,26 @@
 const IdentityService = require('../services/identity/identity.service');
 
+/**
+ * Controller that exposes identity-related HTTP endpoints.
+ * Delegates business logic to the IdentityService.
+ */
 class IdentityController {
   constructor() {
     this.identityService = new IdentityService();
   }
 
+  /**
+   * Register a new identity user and return a normalized response.
+   *
+   * @param {import('express').Request} req - The express request object.
+   * @param {import('express').Response} res - The express response object.
+   * @returns {Promise<void>} Sends a JSON response.
+   */
   async register(req, res) {
     try {
       const userData = req.body;
 
-      // Validar campos requeridos básicos
+      // Validate presence of required registration fields.
       const requiredFields = [
         'username', 'email', 'password', 'cui_hash', 'first_name', 'middle_name',
         'first_last_name', 'second_last_name', 'role', 'public_key',
@@ -41,6 +52,8 @@ class IdentityController {
       });
     } catch (error) {
       console.log('Error type:', error.name, 'Message:', error.message);
+
+      // Handle domain-specific conflict conditions.
       if (error.message === 'Email already exists') {
         return res.status(409).json({ error: error.message });
       }
@@ -53,15 +66,24 @@ class IdentityController {
       if (error.message.includes('Invalid role') || error.message.includes('professional_id is required')) {
         return res.status(400).json({ error: error.message });
       }
+
       console.error('Error registering user:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
+  /**
+   * Authenticate a user and return sanitized user information.
+   *
+   * @param {import('express').Request} req - The express request object.
+   * @param {import('express').Response} res - The express response object.
+   * @returns {Promise<void>} Sends a JSON response.
+   */
   async login(req, res) {
     try {
       const { email, password } = req.body;
 
+      // Validate request payload fields.
       if (!email) {
         return res.status(400).json({ error: 'Missing required field: email' });
       }

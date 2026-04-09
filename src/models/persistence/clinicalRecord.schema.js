@@ -1,5 +1,9 @@
 ﻿const mongoose = require('mongoose');
 
+/**
+ * Schema for persistent clinical record documents.
+ * Includes payload metadata, encryption metadata, and integrity checks.
+ */
 const ClinicalRecordSchema = new mongoose.Schema(
   {
     _id: { type: String, required: true },
@@ -36,6 +40,11 @@ const ClinicalRecordSchema = new mongoose.Schema(
   }
 );
 
+/**
+ * Custom JSON conversion to remove internal Mongoose document version fields.
+ *
+ * @returns {Object} The plain object representation of the document.
+ */
 ClinicalRecordSchema.method('toJSON', function () {
   const object = this.toObject({ getters: true });
   delete object.__v;

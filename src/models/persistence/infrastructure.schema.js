@@ -11,7 +11,10 @@ const sequelize = new Sequelize({
   },
 });
 
-// ProxyNode Model
+/**
+ * Proxy node model for infrastructure persistence.
+ * Stores endpoint information and current availability state.
+ */
 const ProxyNode = sequelize.define(
   'ProxyNode',
   {
@@ -28,7 +31,7 @@ const ProxyNode = sequelize.define(
     status: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
-      defaultValue: true, // ACTIVE: true (1), INACTIVE: false (0)
+      defaultValue: true, // ACTIVE: true, INACTIVE: false
     },
   },
   {
