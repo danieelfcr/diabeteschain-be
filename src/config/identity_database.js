@@ -2,7 +2,7 @@ const { sequelize, User, Role, Status } = require('../models/persistence/user.sc
 
 const initializeIdentityDatabase = async () => {
   try {
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log('Base de datos sincronizada exitosamente');
     
     // Crear catálogos iniciales si no existen
