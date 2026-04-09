@@ -13,6 +13,15 @@ class IdentityService {
   }
 
   /**
+   * Regular expression used to validate UUID identifiers.
+   *
+   * @returns {RegExp} UUID validation expression.
+   */
+  getUuidRegex() {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  }
+
+  /**
    * Remove sensitive fields from a user object before returning it to the caller.
    *
    * @param {Object} user - The user object returned from persistence.
@@ -43,6 +52,78 @@ class IdentityService {
     const error = new Error(message);
     error.statusCode = statusCode;
     return error;
+  }
+
+  /**
+   * Create a generic service error with an HTTP status code.
+   *
+   * @param {string} message - The error message to return.
+   * @param {number} statusCode - HTTP status code associated with the error.
+   * @returns {Error} Error object with a statusCode property.
+   */
+  createServiceError(message, statusCode) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+  }
+
+  /**
+   * Validate that a route identifier exists and follows UUID format.
+   *
+   * @param {string} identifier - Identifier received from the route parameter.
+   * @param {string} fieldName - Parameter name used in error messages.
+   * @throws {Error} When the identifier is missing or invalid.
+   */
+  validateUuidIdentifier(identifier, fieldName) {
+    if (!identifier) {
+      throw this.createServiceError(`Missing required parameter: ${fieldName}`, 400);
+    }
+
+    if (!this.getUuidRegex().test(identifier)) {
+      throw this.createServiceError(`Invalid ${fieldName} format`, 400);
+    }
+  }
+
+  /**
+   * Shape the public key payload according to the user role and lookup type.
+   *
+   * @param {Object} user - User record returned from persistence.
+   * @param {'professional'|'patient'} userType - Expected type of user.
+   * @returns {Object} Sanitized public key response.
+   * @throws {Error} When the user does not match the expected type or has no public key.
+   */
+  mapPublicKeyResponse(user, userType) {
+    if (!user) {
+      throw this.createServiceError('User not found', 404);
+    }
+
+    const isPatient = user.role?.name === 'PATIENT';
+
+    if (userType === 'patient' && !isPatient) {
+      throw this.createServiceError('User not found', 404);
+    }
+
+    if (userType === 'professional' && isPatient) {
+      throw this.createServiceError('User not found', 404);
+    }
+
+    if (!user.public_key) {
+      throw this.createServiceError('Public key not found for this user', 404);
+    }
+
+    const response = {
+      username: user.username,
+      role: user.role?.name || null,
+      public_key: user.public_key,
+    };
+
+    if (isPatient) {
+      response.pseudo_id = user.pseudo_id;
+      return response;
+    }
+
+    response.id = user.id;
+    return response;
   }
 
   /**
@@ -138,6 +219,34 @@ class IdentityService {
     }
 
     return this.sanitizeUser(user);
+  }
+
+  /**
+   * Retrieve the public key of a professional user by internal identifier.
+   *
+   * @param {string} id - Internal user identifier.
+   * @returns {Promise<Object>} Sanitized public key response.
+   * @throws {Error} When validation fails or the user cannot be resolved.
+   */
+  async getProfessionalPublicKeyById(id) {
+    this.validateUuidIdentifier(id, 'id');
+
+    const user = await this.repository.findUserById(id);
+    return this.mapPublicKeyResponse(user, 'professional');
+  }
+
+  /**
+   * Retrieve the public key of a patient user by pseudo identifier.
+   *
+   * @param {string} pseudoId - Patient pseudo identifier.
+   * @returns {Promise<Object>} Sanitized public key response.
+   * @throws {Error} When validation fails or the patient cannot be resolved.
+   */
+  async getPatientPublicKeyByPseudoId(pseudoId) {
+    this.validateUuidIdentifier(pseudoId, 'pseudoId');
+
+    const user = await this.repository.findUserByPseudoId(pseudoId);
+    return this.mapPublicKeyResponse(user, 'patient');
   }
 }
 

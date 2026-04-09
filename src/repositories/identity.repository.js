@@ -66,6 +66,41 @@ class IdentityRepository {
       throw new Error(`Error finding auth user by email: ${error.message}`);
     }
   }
+
+  /**
+   * Find a user by internal identifier including role metadata.
+   *
+   * @param {string} id - Internal user identifier.
+   * @returns {Promise<Object|null>} Matching user or null when it does not exist.
+   * @throws {Error} When query execution fails.
+   */
+  async findUserById(id) {
+    try {
+      return await User.findByPk(id, {
+        include: [{ model: Role, as: 'role' }],
+      });
+    } catch (error) {
+      throw new Error(`Error finding user by id: ${error.message}`);
+    }
+  }
+
+  /**
+   * Find a patient by pseudo identifier including role metadata.
+   *
+   * @param {string} pseudoId - Patient pseudo identifier.
+   * @returns {Promise<Object|null>} Matching patient or null when it does not exist.
+   * @throws {Error} When query execution fails.
+   */
+  async findUserByPseudoId(pseudoId) {
+    try {
+      return await User.findOne({
+        where: { pseudo_id: pseudoId },
+        include: [{ model: Role, as: 'role' }],
+      });
+    } catch (error) {
+      throw new Error(`Error finding user by pseudo id: ${error.message}`);
+    }
+  }
 }
 
 module.exports = IdentityRepository;

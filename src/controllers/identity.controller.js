@@ -107,6 +107,58 @@ class IdentityController {
       return res.status(500).json({ error: 'Internal server error' });
     }
   }
+
+  /**
+   * Retrieve the public key of a professional user by internal identifier.
+   *
+   * @param {import('express').Request} req - The express request object.
+   * @param {import('express').Response} res - The express response object.
+   * @returns {Promise<void>} Sends a JSON response.
+   */
+  async getUserPublicKey(req, res) {
+    try {
+      const { id } = req.params;
+      const user = await this.identityService.getProfessionalPublicKeyById(id);
+
+      return res.status(200).json({
+        message: 'Public key retrieved successfully',
+        user,
+      });
+    } catch (error) {
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      console.error('Error retrieving professional public key:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Retrieve the public key of a patient user by pseudo identifier.
+   *
+   * @param {import('express').Request} req - The express request object.
+   * @param {import('express').Response} res - The express response object.
+   * @returns {Promise<void>} Sends a JSON response.
+   */
+  async getPatientPublicKey(req, res) {
+    try {
+      const { pseudoId } = req.params;
+      const user = await this.identityService.getPatientPublicKeyByPseudoId(pseudoId);
+
+      return res.status(200).json({
+        message: 'Public key retrieved successfully',
+        user,
+      });
+    } catch (error) {
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      console.error('Error retrieving patient public key:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 }
 
 module.exports = IdentityController;

@@ -16,4 +16,16 @@ router.post('/register', (req, res) => identityController.register(req, res));
  */
 router.post('/login', (req, res) => identityController.login(req, res));
 
+/**
+ * GET /auth/users/:id/public-key
+ * Retrieve the public key of a professional user by internal identifier.
+ */
+router.get('/users/:id/public-key', (req, res) => identityController.getUserPublicKey(req, res));
+
+/**
+ * GET /auth/patients/:pseudoId/public-key
+ * Retrieve the public key of a patient user by pseudo identifier.
+ */
+router.get('/patients/:pseudoId/public-key', (req, res) => identityController.getPatientPublicKey(req, res));
+
 module.exports = router;
