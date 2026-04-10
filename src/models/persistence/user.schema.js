@@ -1,12 +1,14 @@
 const { Sequelize, DataTypes } = require('sequelize');
 const path = require('path');
 
+const identityStorage = process.env.IDENTITY_DB_STORAGE || path.join(__dirname, '../../../data/Identity.sqlite');
+
 /**
  * Sequelize instance configured for the identity persistence store.
  */
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: path.join(__dirname, '../../../data/Identity.sqlite'),
+  storage: identityStorage,
   logging: false,
   define: {
     timestamps: true,

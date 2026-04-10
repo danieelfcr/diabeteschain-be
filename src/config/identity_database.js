@@ -1,32 +1,43 @@
-const { sequelize, User, Role, Status } = require('../models/persistence/user.schema');
+const { sequelize, Role, Status } = require('../models/persistence/user.schema');
+
+const defaultRoles = ['PATIENT', 'DOCTOR', 'LABORATORY', 'PHARMACIST', 'ADMIN'];
+const defaultStatuses = ['ACTIVE', 'INACTIVE', 'SUSPENDED'];
+
+const seedIdentityCatalogs = async () => {
+  for (const roleName of defaultRoles) {
+    await Role.findOrCreate({ where: { name: roleName } });
+  }
+
+  for (const statusName of defaultStatuses) {
+    await Status.findOrCreate({ where: { name: statusName } });
+  }
+};
 
 /**
  * Initialize the identity database and ensure required catalog entries exist.
  *
+ * @param {Object} [options]
+ * @param {boolean} [options.force=false] - Recreate the schema from scratch.
  * @returns {Promise<void>} Resolves when the identity database is synchronized and seeded.
  */
-const initializeIdentityDatabase = async () => {
+const initializeIdentityDatabase = async (options = {}) => {
+  const { force = false } = options;
+
   try {
-    await sequelize.sync();
+    await sequelize.sync({ force });
     console.log('Base de datos sincronizada exitosamente');
 
-    // Create initial role catalog entries if they do not already exist.
-    await Role.findOrCreate({ where: { name: 'PATIENT' } });
-    await Role.findOrCreate({ where: { name: 'DOCTOR' } });
-    await Role.findOrCreate({ where: { name: 'LABORATORY' } });
-    await Role.findOrCreate({ where: { name: 'PHARMACIST' } });
-    await Role.findOrCreate({ where: { name: 'ADMIN' } });
+    await seedIdentityCatalogs();
 
-    // Create initial status catalog entries if they do not already exist.
-    await Status.findOrCreate({ where: { name: 'ACTIVE' } });
-    await Status.findOrCreate({ where: { name: 'INACTIVE' } });
-    await Status.findOrCreate({ where: { name: 'SUSPENDED' } });
-
-    console.log('Catálogos inicializados');
+    console.log('Catalogos inicializados');
   } catch (error) {
     console.error('Error inicializando la base de datos:', error);
-    process.exit(1);
+    throw error;
   }
 };
 
-module.exports = { initializeIdentityDatabase, sequelize };
+module.exports = {
+  initializeIdentityDatabase,
+  seedIdentityCatalogs,
+  sequelize,
+};
