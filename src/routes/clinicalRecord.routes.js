@@ -3,9 +3,29 @@ const ClinicalRecordController = require('../controllers/clinicalRecord.controll
 const authMiddleware = require('../middlewares/auth.middleware');
 const authorizeRoles = require('../middlewares/role.middleware');
 
+/**
+ * Router that exposes clinical record endpoints for history retrieval and
+ * clinical event registration.
+ *
+ * The route layer is intentionally kept thin. It applies authentication and
+ * role guards, then delegates request handling to the controller.
+ *
+ * @type {import('express').Router}
+ */
 const router = express.Router();
+
+/**
+ * Controller instance that encapsulates HTTP handling for the clinical record
+ * module.
+ *
+ * @type {ClinicalRecordController}
+ */
 const clinicalRecordController = new ClinicalRecordController();
 
+/**
+ * GET /clinical-records/history/me
+ * Retrieve the authenticated patient's own history.
+ */
 router.get(
   '/history/me',
   authMiddleware,
@@ -13,6 +33,10 @@ router.get(
   clinicalRecordController.getMyHistory.bind(clinicalRecordController)
 );
 
+/**
+ * GET /clinical-records/history/:patientPseudoId
+ * Retrieve a patient's history as an authorized healthcare professional.
+ */
 router.get(
   '/history/:patientPseudoId',
   authMiddleware,
@@ -20,6 +44,10 @@ router.get(
   clinicalRecordController.getPatientHistory.bind(clinicalRecordController)
 );
 
+/**
+ * POST /clinical-records/events/doctor
+ * Register a clinical event authored by a doctor.
+ */
 router.post(
   '/events/doctor',
   authMiddleware,
@@ -27,6 +55,10 @@ router.post(
   clinicalRecordController.registerDoctorEvent.bind(clinicalRecordController)
 );
 
+/**
+ * POST /clinical-records/events/laboratory
+ * Register a laboratory event.
+ */
 router.post(
   '/events/laboratory',
   authMiddleware,
@@ -34,6 +66,10 @@ router.post(
   clinicalRecordController.registerLaboratoryEvent.bind(clinicalRecordController)
 );
 
+/**
+ * POST /clinical-records/events/pharmacy
+ * Register a pharmacy dispatch event.
+ */
 router.post(
   '/events/pharmacy',
   authMiddleware,
