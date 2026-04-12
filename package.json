@@ -21,6 +21,8 @@
   },
   "homepage": "https://github.com/danieelfcr/diabeteschain-be#readme",
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "@hyperledger/fabric-gateway": "^1.10.1",
     "bcrypt": "^6.0.0",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
