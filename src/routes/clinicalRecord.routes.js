@@ -1,65 +1,44 @@
 ﻿const express = require('express');
-const ClinicalRecordRepository = require('../repositories/clinicalRecord.repository');
+const ClinicalRecordController = require('../controllers/clinicalRecord.controller');
+const authMiddleware = require('../middlewares/auth.middleware');
+const authorizeRoles = require('../middlewares/role.middleware');
 
 const router = express.Router();
+const clinicalRecordController = new ClinicalRecordController();
 
-const validateRequiredFields = (payload) => {
-  const requiredFields = [
-    '_id',
-    'patientPseudoId',
-    'scopeId',
-    'recordType',
-    'payloadMetadata',
-    'encryption',
-    'integrity',
-  ];
+router.get(
+  '/history/me',
+  authMiddleware,
+  authorizeRoles('PATIENT'),
+  clinicalRecordController.getMyHistory.bind(clinicalRecordController)
+);
 
-  return requiredFields.every((field) => Object.prototype.hasOwnProperty.call(payload, field));
-};
+router.get(
+  '/history/:patientPseudoId',
+  authMiddleware,
+  authorizeRoles('DOCTOR', 'LABORATORY', 'PHARMACIST'),
+  clinicalRecordController.getPatientHistory.bind(clinicalRecordController)
+);
 
-router.post('/', async (req, res, next) => {
-  try {
-    const clinicalRecord = req.body;
+router.post(
+  '/events/doctor',
+  authMiddleware,
+  authorizeRoles('DOCTOR'),
+  clinicalRecordController.registerDoctorEvent.bind(clinicalRecordController)
+);
 
-    if (!validateRequiredFields(clinicalRecord)) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios en el payload' });
-    }
+router.post(
+  '/events/laboratory',
+  authMiddleware,
+  authorizeRoles('LABORATORY'),
+  clinicalRecordController.registerLaboratoryEvent.bind(clinicalRecordController)
+);
 
-    const createdRecord = await ClinicalRecordRepository.create(clinicalRecord);
-    return res.status(201).json(createdRecord);
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.get('/', async (req, res, next) => {
-  try {
-    const filter = {
-      patientPseudoId: req.query.patientPseudoId,
-      scopeId: req.query.scopeId,
-      recordType: req.query.recordType,
-    };
-
-    const records = await ClinicalRecordRepository.findAll(filter);
-    return res.json(records);
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.get('/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const record = await ClinicalRecordRepository.findById(id);
-
-    if (!record) {
-      return res.status(404).json({ error: 'Clinical record no encontrado' });
-    }
-
-    return res.json(record);
-  } catch (error) {
-    return next(error);
-  }
-});
+router.post(
+  '/events/pharmacy',
+  authMiddleware,
+  authorizeRoles('PHARMACIST'),
+  clinicalRecordController.registerPharmacyDispatch.bind(clinicalRecordController)
+);
 
 module.exports = router;
