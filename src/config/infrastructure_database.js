@@ -9,9 +9,9 @@ const { sequelize, ProxyNode } = require('../models/persistence/infrastructure.s
 const initializeInfrastructureDatabase = async () => {
   try {
     await sequelize.sync({ alter: true });
-    console.log('Base de datos Infrastructure sincronizada exitosamente');
+    console.log('Database Infrastructure initialized successfully');
   } catch (error) {
-    console.error('Error inicializando la base de datos Infrastructure:', error);
+    console.error('Error initializing Infrastructure database:', error);
     process.exit(1);
   }
 };

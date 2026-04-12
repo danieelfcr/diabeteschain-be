@@ -25,13 +25,13 @@ const initializeIdentityDatabase = async (options = {}) => {
 
   try {
     await sequelize.sync({ force });
-    console.log('Base de datos sincronizada exitosamente');
+    console.log('Identity Database synchronized successfully');
 
     await seedIdentityCatalogs();
 
-    console.log('Catalogos inicializados');
+    console.log('Catalogs initialized successfully');
   } catch (error) {
-    console.error('Error inicializando la base de datos:', error);
+    console.error('Error initializing Identity database:', error);
     throw error;
   }
 };

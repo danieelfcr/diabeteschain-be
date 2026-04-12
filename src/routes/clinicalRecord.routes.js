@@ -1,65 +1,80 @@
 ﻿const express = require('express');
-const ClinicalRecordRepository = require('../repositories/clinicalRecord.repository');
+const ClinicalRecordController = require('../controllers/clinicalRecord.controller');
+const authMiddleware = require('../middlewares/auth.middleware');
+const authorizeRoles = require('../middlewares/role.middleware');
 
+/**
+ * Router that exposes clinical record endpoints for history retrieval and
+ * clinical event registration.
+ *
+ * The route layer is intentionally kept thin. It applies authentication and
+ * role guards, then delegates request handling to the controller.
+ *
+ * @type {import('express').Router}
+ */
 const router = express.Router();
 
-const validateRequiredFields = (payload) => {
-  const requiredFields = [
-    '_id',
-    'patientPseudoId',
-    'scopeId',
-    'recordType',
-    'payloadMetadata',
-    'encryption',
-    'integrity',
-  ];
+/**
+ * Controller instance that encapsulates HTTP handling for the clinical record
+ * module.
+ *
+ * @type {ClinicalRecordController}
+ */
+const clinicalRecordController = new ClinicalRecordController();
 
-  return requiredFields.every((field) => Object.prototype.hasOwnProperty.call(payload, field));
-};
+/**
+ * GET /clinical-records/history/me
+ * Retrieve the authenticated patient's own history.
+ */
+router.get(
+  '/history/me',
+  authMiddleware,
+  authorizeRoles('PATIENT'),
+  clinicalRecordController.getMyHistory.bind(clinicalRecordController)
+);
 
-router.post('/', async (req, res, next) => {
-  try {
-    const clinicalRecord = req.body;
+/**
+ * GET /clinical-records/history/:patientPseudoId
+ * Retrieve a patient's history as an authorized healthcare professional.
+ */
+router.get(
+  '/history/:patientPseudoId',
+  authMiddleware,
+  authorizeRoles('DOCTOR', 'LABORATORY', 'PHARMACIST'),
+  clinicalRecordController.getPatientHistory.bind(clinicalRecordController)
+);
 
-    if (!validateRequiredFields(clinicalRecord)) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios en el payload' });
-    }
+/**
+ * POST /clinical-records/events/doctor
+ * Register a clinical event authored by a doctor.
+ */
+router.post(
+  '/events/doctor',
+  authMiddleware,
+  authorizeRoles('DOCTOR'),
+  clinicalRecordController.registerDoctorEvent.bind(clinicalRecordController)
+);
 
-    const createdRecord = await ClinicalRecordRepository.create(clinicalRecord);
-    return res.status(201).json(createdRecord);
-  } catch (error) {
-    return next(error);
-  }
-});
+/**
+ * POST /clinical-records/events/laboratory
+ * Register a laboratory event.
+ */
+router.post(
+  '/events/laboratory',
+  authMiddleware,
+  authorizeRoles('LABORATORY'),
+  clinicalRecordController.registerLaboratoryEvent.bind(clinicalRecordController)
+);
 
-router.get('/', async (req, res, next) => {
-  try {
-    const filter = {
-      patientPseudoId: req.query.patientPseudoId,
-      scopeId: req.query.scopeId,
-      recordType: req.query.recordType,
-    };
-
-    const records = await ClinicalRecordRepository.findAll(filter);
-    return res.json(records);
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.get('/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const record = await ClinicalRecordRepository.findById(id);
-
-    if (!record) {
-      return res.status(404).json({ error: 'Clinical record no encontrado' });
-    }
-
-    return res.json(record);
-  } catch (error) {
-    return next(error);
-  }
-});
+/**
+ * POST /clinical-records/events/pharmacy
+ * Register a pharmacy dispatch event.
+ */
+router.post(
+  '/events/pharmacy',
+  authMiddleware,
+  authorizeRoles('PHARMACIST'),
+  clinicalRecordController.registerPharmacyDispatch.bind(clinicalRecordController)
+);
 
 module.exports = router;
