@@ -1,7 +1,9 @@
 const express = require('express');
 const PermissionController = require('../controllers/permission.controller');
 const authMiddleware = require('../middlewares/auth.middleware');
-const authorizeRoles = require('../middlewares/role.middleware');
+const validateDto = require('../middlewares/validateDto.middleware');
+const GrantAccessDTO = require('../models/api/permissions/grant-access.dto');
+const RevokeAccessDTO = require('../models/api/permissions/revoke-access.dto');
 
 /**
  * Router that exposes access management endpoints for patient-controlled
@@ -28,7 +30,8 @@ const permissionController = new PermissionController();
 router.post(
   '/grants',
   authMiddleware,
-  authorizeRoles('PATIENT'),
+  validateDto(GrantAccessDTO),
+  //authorizeRoles('PATIENT'),
   permissionController.grantAccess.bind(permissionController)
 );
 
@@ -39,7 +42,8 @@ router.post(
 router.post(
   '/revocations',
   authMiddleware,
-  authorizeRoles('PATIENT'),
+  validateDto(RevokeAccessDTO),
+  //authorizeRoles('PATIENT'),
   permissionController.revokeAccess.bind(permissionController)
 );
 

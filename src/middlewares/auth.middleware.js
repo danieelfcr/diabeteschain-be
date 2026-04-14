@@ -16,7 +16,7 @@ module.exports = (req, res, next) => {
     // coupling the scaffolding effort to the final authentication design.
     req.user = {
       id: req.headers['x-user-id'] || null,
-      pseudo_id: req.headers['x-user-pseudo-id'] || null,
+      pseudoId: req.headers['x-user-pseudo-id'] || null,
       role: req.headers['x-user-role'] || null,
     };
   }
