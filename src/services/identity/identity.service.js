@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { Role, Status } = require('../../models/persistence/user.schema');
 const IdentityRepository = require('../../repositories/identity.repository');
+const { createAppError } = require('../../utils/app-error');
 
 /**
  * Service responsible for identity-related business logic.
@@ -42,32 +43,6 @@ class IdentityService {
   }
 
   /**
-   * Create a structured authentication error with an HTTP status code.
-   *
-   * @param {string} message - The error message to return.
-   * @param {number} statusCode - HTTP status code associated with the error.
-   * @returns {Error} Error object with a statusCode property.
-   */
-  createAuthError(message, statusCode) {
-    const error = new Error(message);
-    error.statusCode = statusCode;
-    return error;
-  }
-
-  /**
-   * Create a generic service error with an HTTP status code.
-   *
-   * @param {string} message - The error message to return.
-   * @param {number} statusCode - HTTP status code associated with the error.
-   * @returns {Error} Error object with a statusCode property.
-   */
-  createServiceError(message, statusCode) {
-    const error = new Error(message);
-    error.statusCode = statusCode;
-    return error;
-  }
-
-  /**
    * Validate that a route identifier exists and follows UUID format.
    *
    * @param {string} identifier - Identifier received from the route parameter.
@@ -76,11 +51,11 @@ class IdentityService {
    */
   validateUuidIdentifier(identifier, fieldName) {
     if (!identifier) {
-      throw this.createServiceError(`Missing required parameter: ${fieldName}`, 400);
+      throw createAppError(`Missing required parameter: ${fieldName}`, 400);
     }
 
     if (!this.getUuidRegex().test(identifier)) {
-      throw this.createServiceError(`Invalid ${fieldName} format`, 400);
+      throw createAppError(`Invalid ${fieldName} format`, 400);
     }
   }
 
@@ -94,21 +69,21 @@ class IdentityService {
    */
   mapPublicKeyResponse(user, userType) {
     if (!user) {
-      throw this.createServiceError('User not found', 404);
+      throw createAppError('User not found', 404);
     }
 
     const isPatient = user.role?.name === 'PATIENT';
 
     if (userType === 'patient' && !isPatient) {
-      throw this.createServiceError('User not found', 404);
+      throw createAppError('User not found', 404);
     }
 
     if (userType === 'professional' && isPatient) {
-      throw this.createServiceError('User not found', 404);
+      throw createAppError('User not found', 404);
     }
 
     if (!user.public_key) {
-      throw this.createServiceError('Public key not found for this user', 404);
+      throw createAppError('Public key not found for this user', 404);
     }
 
     const response = {
@@ -206,16 +181,16 @@ class IdentityService {
 
     const user = await this.repository.findAuthUserByEmail(email);
     if (!user) {
-      throw this.createAuthError('Invalid credentials', 401);
+      throw createAppError('Invalid credentials', 401, 'AUTH_ERROR');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
-      throw this.createAuthError('Invalid credentials', 401);
+      throw createAppError('Invalid credentials', 401, 'AUTH_ERROR');
     }
 
     if (user.status?.name !== 'ACTIVE') {
-      throw this.createAuthError('User is inactive or blocked', 403);
+      throw createAppError('User is inactive or blocked', 403, 'AUTH_ERROR');
     }
 
     return this.sanitizeUser(user);
