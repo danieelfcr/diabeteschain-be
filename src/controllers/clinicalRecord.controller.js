@@ -1,4 +1,5 @@
 const ClinicalRecordOrchestrationService = require('../services/orchestration/clinicalRecord.orchestration.service');
+const { createAppError } = require('../utils/app-error');
 
 /**
  * Controller responsible for clinical record HTTP endpoints.
@@ -16,33 +17,21 @@ class ClinicalRecordController {
   }
 
   /**
-   * Create a typed application error that includes an HTTP status code.
-   *
-   * @param {string} message - Error message intended for the response.
-   * @param {number} statusCode - HTTP status code associated with the error.
-   * @returns {Error} Error instance extended with a statusCode property.
-   */
-  createServiceError(message, statusCode) {
-    const error = new Error(message);
-    error.statusCode = statusCode;
-    return error;
-  }
-
-  /**
    * Handle the patient's own history query.
    *
    * @param {import('express').Request} req - Express request object.
    * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async getMyHistory(req, res) {
+  async getMyHistory(req, res, next) {
     try {
       const actor = req.user;
       // The authenticated patient's pseudo identifier becomes the primary
       // filter for self-history retrieval.
       const filters = {
-        patientPseudoId: actor?.pseudo_id,
+        patientPseudoId: actor?.pseudoId,
         scopeId: req.query.scopeId,
         recordType: req.query.recordType,
       };
@@ -50,7 +39,7 @@ class ClinicalRecordController {
       const result = await this.orchestrationService.getPatientHistory(filters, actor);
       return res.status(200).json(result);
     } catch (error) {
-      return this.handleError(error, res, 'Error retrieving patient history');
+      return next(error);
     }
   }
 
@@ -59,14 +48,15 @@ class ClinicalRecordController {
    *
    * @param {import('express').Request} req - Express request object.
    * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async getPatientHistory(req, res) {
+  async getPatientHistory(req, res, next) {
     try {
       const { patientPseudoId } = req.params;
       if (!patientPseudoId) {
-        throw this.createServiceError('Missing required parameter: patientPseudoId', 400);
+        throw createAppError('Missing required parameter: patientPseudoId', 400);
       }
 
       // Route and query data are normalized before they are passed to the
@@ -80,7 +70,7 @@ class ClinicalRecordController {
       const result = await this.orchestrationService.getProfessionalHistory(filters, req.user);
       return res.status(200).json(result);
     } catch (error) {
-      return this.handleError(error, res, 'Error retrieving professional history');
+      return next(error);
     }
   }
 
@@ -89,15 +79,16 @@ class ClinicalRecordController {
    *
    * @param {import('express').Request} req - Express request object.
    * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async registerDoctorEvent(req, res) {
+  async registerDoctorEvent(req, res, next) {
     try {
       const result = await this.orchestrationService.registerDoctorEvent(req.body, req.user);
       return res.status(202).json(result);
     } catch (error) {
-      return this.handleError(error, res, 'Error registering doctor event');
+      return next(error);
     }
   }
 
@@ -106,15 +97,16 @@ class ClinicalRecordController {
    *
    * @param {import('express').Request} req - Express request object.
    * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async registerLaboratoryEvent(req, res) {
+  async registerLaboratoryEvent(req, res, next) {
     try {
       const result = await this.orchestrationService.registerLaboratoryEvent(req.body, req.user);
       return res.status(202).json(result);
     } catch (error) {
-      return this.handleError(error, res, 'Error registering laboratory event');
+      return next(error);
     }
   }
 
@@ -123,33 +115,17 @@ class ClinicalRecordController {
    *
    * @param {import('express').Request} req - Express request object.
    * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async registerPharmacyDispatch(req, res) {
+  async registerPharmacyDispatch(req, res, next) {
     try {
       const result = await this.orchestrationService.registerPharmacyDispatch(req.body, req.user);
       return res.status(202).json(result);
     } catch (error) {
-      return this.handleError(error, res, 'Error registering pharmacy dispatch');
+      return next(error);
     }
-  }
-
-  /**
-   * Translate controller and service errors into consistent HTTP responses.
-   *
-   * @param {Error} error - Error raised by the request handling flow.
-   * @param {import('express').Response} res - Express response object.
-   * @param {string} logMessage - Contextual message for server logs.
-   * @returns {import('express').Response} Error response.
-   */
-  handleError(error, res, logMessage) {
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({ error: error.message });
-    }
-
-    console.error(logMessage, error);
-    return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
