@@ -41,7 +41,7 @@ router.get(
   '/history/:patientPseudoId',
   authMiddleware,
   //authorizeRoles('DOCTOR', 'LABORATORY', 'PHARMACIST'),
-  clinicalRecordController.getPatientHistory.bind(clinicalRecordController)
+  clinicalRecordController.getProfessionalHistory.bind(clinicalRecordController)
 );
 
 /**

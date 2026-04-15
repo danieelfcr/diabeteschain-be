@@ -11,8 +11,8 @@ function mapReferenceMetadata(reference) {
 
   return {
     docType: reference.docType || null,
-    recordId: reference.recordId || null,
-    patientId: reference.patientId || null,
+    recordId: reference.recordId || reference.clinicalRecordId || reference.documentId || reference.id || reference._id || null,
+    patientId: reference.patientId || reference.patientPseudoId || null,
     encounterId: reference.encounterId || null,
     scopeId: reference.scopeId || null,
     recordType: reference.recordType || null,
@@ -35,7 +35,7 @@ function mapReferenceMetadata(reference) {
  */
 function mapClinicalRecord(record, reference = null) {
   return {
-    recordId: record.recordId || null,
+    recordId: record.recordId || record._id || null,
     patientId: record.patientPseudoId || null,
     scopeId: record.scopeId || null,
     scope: record.scopeId || null,

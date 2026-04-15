@@ -53,6 +53,10 @@ class ClinicalRecordRepository {
     const query = { patientPseudoId };
 
     const recordIds = this.extractReferenceIds(references);
+    if (references.length > 0 && recordIds.length === 0) {
+      return [];
+    }
+
     if (recordIds.length) {
       query._id = { $in: recordIds };
     }

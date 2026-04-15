@@ -1,5 +1,5 @@
 const ClinicalRecordOrchestrationService = require('../services/orchestration/clinicalRecord.orchestration.service');
-const { createAppError } = require('../utils/app-error');
+const GetProfessionalHistoryDTO = require('../models/api/clinical-records/get-professional-history.dto');
 
 /**
  * Controller responsible for clinical record HTTP endpoints.
@@ -43,14 +43,11 @@ class ClinicalRecordController {
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async getPatientHistory(req, res, next) {
+  async getProfessionalHistory(req, res, next) {
     try {
-      const { patientPseudoId } = req.params;
-      if (!patientPseudoId) {
-        throw createAppError('Missing required parameter: patientPseudoId', 400);
-      }
-
-      const payload = { patientPseudoId };
+      const payload = req.validatedBody || GetProfessionalHistoryDTO.from({
+        patientPseudoId: req.params.patientPseudoId,
+      });
 
       const result = await this.orchestrationService.getProfessionalHistory(payload, req.user);
       return res.status(200).json(result);
