@@ -19,17 +19,6 @@ class PermissionOrchestrationService {
   }
 
   /**
-   * Resolve a patient's pseudo identifier from either normalized application
-   * objects or persistence models that still expose snake_case fields.
-   *
-   * @param {Object|null|undefined} source - Actor or patient source object.
-   * @returns {string|null} Normalized pseudo identifier.
-   */
-  getPseudoId(source) {
-    return source?.pseudoId || source?.pseudo_id || null;
-  }
-
-  /**
    * Resolve a normalized role name from plain objects or Sequelize models.
    *
    * @param {Object|string|null|undefined} source - User or role source.
@@ -45,16 +34,6 @@ class PermissionOrchestrationService {
     }
 
     return source?.role?.name || source?.role || source?.name || null;
-  }
-
-  /**
-   * Resolve a normalized public key from camelCase or snake_case models.
-   *
-   * @param {Object|null|undefined} source - User source object.
-   * @returns {string|null} Public key string.
-   */
-  getPublicKey(source) {
-    return source?.publicKey || source?.public_key || null;
   }
 
   /**
@@ -75,7 +54,7 @@ class PermissionOrchestrationService {
     }
 
     // 1.2 Get patient's public key from IdentityRepository using actor's pseudoId
-    const patientPseudoId = this.getPseudoId(actor);
+    const patientPseudoId = actor.pseudoId || null;
     if (!patientPseudoId) {
       throw createAppError('Authenticated patient pseudoId is required', 400);
     }
@@ -113,7 +92,7 @@ class PermissionOrchestrationService {
     };
     //
     const isSignatureValid = await this.identityRepository.verifySignature({
-      publicKey: this.getPublicKey(patient),
+      publicKey: patient.publicKey,
       payload: signaturePayload,
       signature: payload.signature,
     });
@@ -187,7 +166,7 @@ class PermissionOrchestrationService {
     }
 
     // 1.2 Resolve the patient pseudoId from the authenticated actor only.
-    const patientPseudoId = this.getPseudoId(actor);
+    const patientPseudoId = actor.pseudoId || null;
     if (!patientPseudoId) {
       throw createAppError('Authenticated patient pseudoId is required', 400);
     }
@@ -217,7 +196,7 @@ class PermissionOrchestrationService {
     };
 
     const isSignatureValid = await this.identityRepository.verifySignature({
-      publicKey: this.getPublicKey(patient),
+      publicKey: patient.publicKey,
       payload: signaturePayload,
       signature: payload.signature,
     });
@@ -279,7 +258,7 @@ class PermissionOrchestrationService {
 
     return {
       id: actor.id || null,
-      pseudoId: this.getPseudoId(actor),
+      pseudoId: actor.pseudoId || null,
       role: actor.role?.name || actor.role || null,
     };
   }
