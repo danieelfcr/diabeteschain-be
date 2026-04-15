@@ -27,16 +27,7 @@ class ClinicalRecordController {
    */
   async getMyHistory(req, res, next) {
     try {
-      const actor = req.user;
-      // The authenticated patient's pseudo identifier becomes the primary
-      // filter for self-history retrieval.
-      const filters = {
-        patientPseudoId: actor?.pseudoId,
-        scopeId: req.query.scopeId,
-        recordType: req.query.recordType,
-      };
-
-      const result = await this.orchestrationService.getPatientHistory(filters, actor);
+      const result = await this.orchestrationService.getPatientHistory({}, req.user);
       return res.status(200).json(result);
     } catch (error) {
       return next(error);
@@ -59,15 +50,9 @@ class ClinicalRecordController {
         throw createAppError('Missing required parameter: patientPseudoId', 400);
       }
 
-      // Route and query data are normalized before they are passed to the
-      // orchestration layer.
-      const filters = {
-        patientPseudoId,
-        scopeId: req.query.scopeId,
-        recordType: req.query.recordType,
-      };
+      const payload = { patientPseudoId };
 
-      const result = await this.orchestrationService.getProfessionalHistory(filters, req.user);
+      const result = await this.orchestrationService.getProfessionalHistory(payload, req.user);
       return res.status(200).json(result);
     } catch (error) {
       return next(error);

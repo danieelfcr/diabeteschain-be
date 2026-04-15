@@ -10,14 +10,96 @@ const { getContract } = require('../config/fabric_gateway');
  */
 class FabricClinicalRecordRepository {
   /**
+   * Parse Fabric Gateway responses into JSON when possible.
+   *
+   * @param {Uint8Array|Buffer|null|undefined} resultBytes - Raw result bytes.
+   * @returns {Object|Array|string|null} Parsed result payload.
+   */
+  parseResult(resultBytes) {
+    if (!resultBytes?.length) {
+      return null;
+    }
+
+    const resultText = resultBytes.toString();
+
+    try {
+      return JSON.parse(resultText);
+    } catch (error) {
+      return resultText;
+    }
+  }
+
+  /**
+   * Normalize the patient history response returned by the chaincode.
+   *
+   * Expected reference shape:
+   * {
+   *   docType,
+   *   recordId,
+   *   patientId,
+   *   encounterId,
+   *   scopeId,
+   *   recordType,
+   *   offchainUri,
+   *   hash,
+   *   createdBy,
+   *   authorRole,
+   *   status,
+   *   createdAt,
+   *   updatedAt
+   * }
+   *
+   * @param {Object|Array|string|null} result - Parsed ledger payload.
+   * @returns {Array<Object>} Normalized references array.
+   */
+  normalizePatientRecordIndexes(result) {
+    if (!result) {
+      return [];
+    }
+
+    if (Array.isArray(result)) {
+      return result;
+    }
+
+    if (Array.isArray(result.references)) {
+      return result.references;
+    }
+
+    if (Array.isArray(result.records)) {
+      return result.records;
+    }
+
+    if (Array.isArray(result.data)) {
+      return result.data;
+    }
+
+    return [];
+  }
+
+  /**
    * Retrieve a patient's history from the ledger.
    *
    * @param {string} patientPseudoId - Patient pseudo identifier.
-   * @returns {Promise<Object>} Placeholder repository response.
+   * @returns {Promise<Object|Array|string|null>} Ledger references or metadata.
+   */
+  async getPatientRecordIndexes(patientPseudoId) {
+    const contract = await this.getContractReference();
+    const resultBytes = await contract.evaluateTransaction(
+      'GetHistoryByPatientPseudoId',
+      JSON.stringify({ patientPseudoId })
+    );
+
+    return this.normalizePatientRecordIndexes(this.parseResult(resultBytes));
+  }
+
+  /**
+   * Backwards-compatible alias for patient history lookups on the ledger.
+   *
+   * @param {string} patientPseudoId - Patient pseudo identifier.
+   * @returns {Promise<Object|Array|string|null>} Ledger references or metadata.
    */
   async getHistoryByPatientPseudoId(patientPseudoId) {
-    await this.getContractReference();
-    return this.buildPendingResponse('getHistoryByPatientPseudoId', { patientPseudoId });
+    return this.getPatientRecordIndexes(patientPseudoId);
   }
 
   /**

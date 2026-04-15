@@ -1,6 +1,9 @@
 const ClinicalRecordRepository = require('../../repositories/clinicalRecord.repository');
 const FabricClinicalRecordRepository = require('../../repositories/fabricClinicalRecord.repository');
+const IdentityRepository = require('../../repositories/identity.repository');
 const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
+const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
+const { createAppError } = require('../../utils/app-error');
 
 /**
  * Service responsible for coordinating clinical record use cases.
@@ -17,30 +20,82 @@ class ClinicalRecordOrchestrationService {
   constructor() {
     this.clinicalRecordRepository = ClinicalRecordRepository;
     this.fabricClinicalRecordRepository = new FabricClinicalRecordRepository();
+    this.identityRepository = new IdentityRepository();
     this.proxyReencryptionClient = new ProxyReencryptionClient();
+  }
+
+  /**
+   * Resolve a normalized role name from plain objects or persistence models.
+   *
+   * @param {Object|string|null|undefined} source - User or role source.
+   * @returns {string|null} Normalized role name.
+   */
+  getRoleName(source) {
+    if (!source) {
+      return null;
+    }
+
+    if (typeof source === 'string') {
+      return source;
+    }
+
+    return source?.role?.name || source?.role || source?.name || null;
   }
 
   /**
    * Coordinate retrieval of the authenticated patient's history.
    *
-   * @param {Object} filters - Normalized query filters.
+   * @param {Object} payload - Request payload submitted by the client.
    * @param {Object} actor - Authenticated user context.
    * @returns {Promise<Object>} Placeholder orchestration response.
    */
-  async getPatientHistory(filters, actor) {
+  async getPatientHistory(payload, actor) {
+    // 1. Validations
+    // 1.1 Validate that the actor is authenticated and has the PATIENT role
+    if (!actor) {
+      throw createAppError('Authentication required to retrieve patient history', 401);
+    }
+    if (this.getRoleName(actor) !== 'PATIENT') {
+      throw createAppError('Only users with PATIENT role can retrieve their own history', 403);
+    }
+
+    // 1.2 Resolve the patient pseudoId only from the authenticated actor
+    const patientPseudoId = actor.pseudoId || null;
+    if (!patientPseudoId) {
+      throw createAppError('Authenticated patient pseudoId is required', 400);
+    }
+
+    // 1.3 Resolve the patient identity from a trusted source
+    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
+    if (!patient) {
+      throw createAppError('Authenticated patient not found in identity repository', 404);
+    }
+
+    // 2. Retrieve clinical references/indexes from the ledger for the patient
+    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexes(patientPseudoId);
+
+    // 3. Retrieve encrypted off-chain clinical records for the patient
+    const records = references.length
+      ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(references, patientPseudoId)
+      : await this.clinicalRecordRepository.getPatientClinicalDocuments(patientPseudoId);
+
+    const referenceMap = new Map(
+      references
+        .map((reference) => [reference.recordId, reference])
+        .filter(([recordId]) => Boolean(recordId))
+    );
+
     return {
-      message: 'Patient history orchestration pending implementation',
-      status: 'pending_implementation',
+      message: 'Patient history retrieved successfully',
+      status: 'success',
       action: 'get_patient_history',
-      actor: this.mapActor(actor),
-      filters,
-      // These integration points document the collaborators expected in the
-      // final implementation of the use case.
-      integrationPoints: [
-        'FabricClinicalRecordRepository.getHistoryByPatientPseudoId',
-        'ClinicalRecordRepository.findAll',
-        'ProxyReencryptionClient.resolveHistoryAccess',
-      ],
+      patient: {
+        id: patient.id || null,
+        pseudoId: patient.pseudoId || patientPseudoId,
+        username: patient.username || null,
+      },
+      totalRecords: records.length,
+      records: records.map((record) => mapClinicalRecord(record, referenceMap.get(record.recordId) || null)),
     };
   }
 
@@ -143,7 +198,7 @@ class ClinicalRecordOrchestrationService {
 
     return {
       id: actor.id || null,
-      pseudo_id: actor.pseudo_id || null,
+      pseudoId: actor.pseudoId || null,
       role: actor.role?.name || actor.role || null,
     };
   }
