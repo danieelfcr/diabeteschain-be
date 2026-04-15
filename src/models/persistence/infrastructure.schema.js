@@ -23,10 +23,11 @@ const ProxyNode = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    endpoint_url: {
+    endpointUrl: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
+      field: 'endpoint_url',
     },
     status: {
       type: DataTypes.BOOLEAN,

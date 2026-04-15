@@ -22,10 +22,10 @@ class IdentityController {
 
       // Validate presence of required registration fields.
       const requiredFields = [
-        'username', 'email', 'password', 'cui_hash', 'first_name', 'middle_name',
-        'first_last_name', 'second_last_name', 'role', 'public_key',
-        'encrypted_private_key_by_password', 'password_kdf_salt',
-        'encrypted_private_key_by_recovery', 'recovery_kdf_salt', 'recovery_key_hash'
+        'username', 'email', 'password', 'cuiHash', 'firstName', 'middleName',
+        'firstLastName', 'secondLastName', 'role', 'publicKey',
+        'encryptedPrivateKeyByPassword', 'passwordKdfSalt',
+        'encryptedPrivateKeyByRecovery', 'recoveryKdfSalt', 'recoveryKeyHash'
       ];
 
       for (const field of requiredFields) {
@@ -40,14 +40,14 @@ class IdentityController {
         message: 'User registered successfully',
         user: {
           id: user.id,
-          pseudo_id: user.pseudo_id,
-          professional_id: user.professional_id,
+          pseudoId: user.pseudoId,
+          professionalId: user.professionalId,
           username: user.username,
           email: user.email,
-          first_name: user.first_name,
+          firstName: user.firstName,
           role: user.role.name,
           status: user.status.name,
-          created_at: user.created_at,
+          createdAt: user.createdAt,
         }
       });
     } catch (error) {
@@ -63,7 +63,7 @@ class IdentityController {
       if (error.name === 'SequelizeValidationError') {
         return res.status(400).json({ error: 'Validation error: ' + error.errors.map(e => e.message).join(', ') });
       }
-      if (error.message.includes('Invalid role') || error.message.includes('professional_id is required')) {
+      if (error.message.includes('Invalid role') || error.message.includes('professionalId is required')) {
         return res.status(400).json({ error: error.message });
       }
 

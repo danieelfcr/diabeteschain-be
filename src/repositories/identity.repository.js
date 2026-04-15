@@ -95,7 +95,7 @@ class IdentityRepository {
   async findUserByPseudoId(pseudoId) {
     try {
       return await User.findOne({
-        where: { pseudo_id: pseudoId },
+        where: { pseudoId },
         include: [{ model: Role, as: 'role' }],
       });
     } catch (error) {

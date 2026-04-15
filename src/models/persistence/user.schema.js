@@ -76,15 +76,17 @@ const User = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    pseudo_id: {
+    pseudoId: {
       type: DataTypes.STRING,
       allowNull: true,
       unique: true,
+      field: 'pseudo_id',
     },
-    professional_id: {
+    professionalId: {
       type: DataTypes.STRING,
       allowNull: true,
       unique: true,
+      field: 'professional_id',
     },
     username: {
       type: DataTypes.STRING,
@@ -99,71 +101,85 @@ const User = sequelize.define(
         isEmail: true,
       },
     },
-    password_hash: {
+    passwordHash: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'password_hash',
     },
-    cui_hash: {
+    cuiHash: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
+      field: 'cui_hash',
     },
-    first_name: {
+    firstName: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'first_name',
     },
-    middle_name: {
+    middleName: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'middle_name',
     },
-    first_last_name: {
+    firstLastName: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'first_last_name',
     },
-    second_last_name: {
+    secondLastName: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'second_last_name',
     },
-    role_id: {
+    roleId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'roles',
         key: 'id',
       },
+      field: 'role_id',
     },
-    status_id: {
+    statusId: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'statuses',
         key: 'id',
       },
+      field: 'status_id',
     },
-    public_key: {
+    publicKey: {
       type: DataTypes.TEXT,
       allowNull: false,
+      field: 'public_key',
     },
-    encrypted_private_key_by_password: {
+    encryptedPrivateKeyByPassword: {
       type: DataTypes.TEXT,
       allowNull: false,
+      field: 'encrypted_private_key_by_password',
     },
-    password_kdf_salt: {
+    passwordKdfSalt: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'password_kdf_salt',
     },
-    encrypted_private_key_by_recovery: {
+    encryptedPrivateKeyByRecovery: {
       type: DataTypes.TEXT,
       allowNull: false,
+      field: 'encrypted_private_key_by_recovery',
     },
-    recovery_kdf_salt: {
+    recoveryKdfSalt: {
       type: DataTypes.STRING,
       allowNull: false,
+      field: 'recovery_kdf_salt',
     },
-    recovery_key_hash: {
+    recoveryKeyHash: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
+      field: 'recovery_key_hash',
     },
   },
   {
@@ -174,22 +190,22 @@ const User = sequelize.define(
 
 // Define associations between user, role, and status models.
 User.belongsTo(Role, {
-  foreignKey: 'role_id',
+  foreignKey: 'roleId',
   as: 'role',
 });
 
 User.belongsTo(Status, {
-  foreignKey: 'status_id',
+  foreignKey: 'statusId',
   as: 'status',
 });
 
 Role.hasMany(User, {
-  foreignKey: 'role_id',
+  foreignKey: 'roleId',
   as: 'users',
 });
 
 Status.hasMany(User, {
-  foreignKey: 'status_id',
+  foreignKey: 'statusId',
   as: 'users',
 });
 
