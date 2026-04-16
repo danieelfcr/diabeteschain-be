@@ -211,6 +211,9 @@ describe('Identity routes integration', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.message).toBe('Login successful');
+      expect(response.body.tokenType).toBe('Bearer');
+      expect(response.body.accessToken).toEqual(expect.any(String));
+      expect(response.body.expiresIn).toBe(process.env.JWT_ACCESS_EXPIRES_IN);
       expect(response.body.user.email).toBe('patient@example.com');
       expect(response.body.user.role).toBe('PATIENT');
     });
@@ -261,6 +264,7 @@ describe('Identity routes integration', () => {
         .send({ email: 'patient@example.com', password: 'StrongPassword123!' });
 
       expect(response.status).toBe(200);
+      expect(response.body.accessToken).toEqual(expect.any(String));
       expect(response.body.user.passwordHash).toBeUndefined();
     });
   });
