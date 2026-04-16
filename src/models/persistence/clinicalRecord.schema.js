@@ -12,7 +12,7 @@ const ClinicalRecordSchema = new mongoose.Schema(
     recordType: {
       type: String,
       required: true,
-      enum: ['LAB_RESULT', 'LAB_ORDER', 'ENCOUNTER', 'MEDICAL_PRESCRIPTION'],
+      enum: ['LAB_RESULT', 'LAB_ORDER', 'ENCOUNTER', 'MEDICAL_PRESCRIPTION', 'PHARMACY_DISPATCH'],
     },
     encounterId: { type: String, default: null, trim: true },
     relationships: {

@@ -1,3 +1,5 @@
+const { createAppError } = require('./app-error');
+
 /**
  * Normalize any scalar or array-like value into a clean array.
  *
@@ -170,6 +172,199 @@ function filterReferencesByScopes(references = [], effectiveScopes = []) {
   });
 }
 
+/**
+ * Normalize a chaincode record type into the persistence enum format.
+ *
+ * @param {string|null|undefined} value - Record type to normalize.
+ * @returns {string|null} Normalized record type.
+ */
+function normalizeRecordType(value) {
+  if (!value) {
+    return null;
+  }
+
+  return String(value).trim().replace(/[\s-]+/g, '_').toUpperCase();
+}
+
+/**
+ * Map a professional role into the lower-case value expected by the ledger index.
+ *
+ * @param {string|null|undefined} role - Healthcare professional role.
+ * @returns {string|null} Ledger author role.
+ */
+function getLedgerAuthorRole(role) {
+  const normalizedRole = role ? String(role).trim().toUpperCase() : null;
+
+  if (!normalizedRole) {
+    return null;
+  }
+
+  const authorRoleMap = {
+    DOCTOR: 'doctor',
+    LABORATORY: 'laboratory',
+    PHARMACIST: 'pharmacist',
+  };
+
+  return authorRoleMap[normalizedRole] || normalizedRole.toLowerCase();
+}
+
+/**
+ * Convert persistence model instances into plain objects.
+ *
+ * @param {Object} source - Record source.
+ * @returns {Object} Plain object representation.
+ */
+function toPlainObject(source) {
+  if (!source) {
+    return source;
+  }
+
+  if (typeof source.toJSON === 'function') {
+    return source.toJSON();
+  }
+
+  if (typeof source.toObject === 'function') {
+    return source.toObject();
+  }
+
+  return source;
+}
+
+/**
+ * Build the prototype off-chain URI stored in the clinical index.
+ *
+ * @param {string} recordId - Clinical record identifier.
+ * @returns {string} Off-chain URI for the record.
+ */
+function buildOffchainUri(recordId) {
+  return `mongo://clinical-records/${recordId}`;
+}
+
+/**
+ * Check whether a permission allows a given action.
+ *
+ * @param {Object|null} permission - Normalized permission.
+ * @param {string} action - Action to validate.
+ * @returns {boolean} True when the action is allowed.
+ */
+function permissionAllowsAction(permission, action) {
+  if (!permission || !action) {
+    return false;
+  }
+
+  return (permission.allowedActions || [])
+    .map((entry) => String(entry).trim().toLowerCase())
+    .includes(String(action).trim().toLowerCase());
+}
+
+/**
+ * Validate that all requested scopes are included in the permission.
+ *
+ * @param {Object|null} permission - Normalized permission.
+ * @param {string[]} requestedScopes - Scopes requested by the operation.
+ */
+function validateRequestedScopes(permission, requestedScopes = []) {
+  const uniqueScopes = [...new Set(requestedScopes.filter(Boolean))];
+  if (uniqueScopes.length === 0) {
+    throw createAppError('At least one clinical scope is required', 400);
+  }
+
+  const allowedScopes = (permission?.allowedScopes || []).filter(Boolean);
+  if (allowedScopes.includes('*')) {
+    return;
+  }
+
+  const unauthorizedScopes = uniqueScopes.filter((scopeId) => !allowedScopes.includes(scopeId));
+
+  if (unauthorizedScopes.length > 0) {
+    throw createAppError(
+      `Active permission does not allow requested scopes: ${unauthorizedScopes.join(', ')}`,
+      403
+    );
+  }
+}
+
+/**
+ * Build the record fragment used for request signature verification.
+ *
+ * @param {Object|null} recordInput - Clinical record payload block.
+ * @param {string} recordType - Record type represented by the block.
+ * @returns {Object|null} Structured signature fragment.
+ */
+function buildSignatureRecordPayload(recordInput, recordType) {
+  if (!recordInput) {
+    return null;
+  }
+
+  return {
+    recordType,
+    scopeId: recordInput.scopeId,
+    payloadMetadata: recordInput.payloadMetadata,
+    encryption: recordInput.encryption,
+    integrity: recordInput.integrity,
+  };
+}
+
+/**
+ * Build the persistence payload for a clinical record document.
+ *
+ * @param {Object} options - Record build options.
+ * @param {string} options.recordId - Generated record identifier.
+ * @param {string} options.patientPseudoId - Patient pseudo identifier.
+ * @param {string} options.recordType - Clinical record type.
+ * @param {Object} options.recordInput - Encrypted clinical record payload.
+ * @param {string|null|undefined} options.encounterId - Encounter identifier for linkage.
+ * @param {Object} options.relationships - Relationships payload.
+ * @returns {Object} Persistence payload for MongoDB.
+ */
+function buildClinicalRecordDocument({
+  recordId,
+  patientPseudoId,
+  recordType,
+  recordInput,
+  encounterId,
+  relationships = {},
+}) {
+  return {
+    _id: recordId,
+    patientPseudoId,
+    scopeId: recordInput.scopeId,
+    recordType,
+    encounterId: encounterId || null,
+    relationships: {
+      basedOn: relationships.basedOn || null,
+      partOf: relationships.partOf || null,
+    },
+    payloadMetadata: recordInput.payloadMetadata,
+    encryption: recordInput.encryption,
+    integrity: recordInput.integrity,
+  };
+}
+
+/**
+ * Build the clinical index payload registered in blockchain.
+ *
+ * @param {Object} options - Index build options.
+ * @param {Object} options.record - Persisted clinical record document.
+ * @param {Object} options.context - Validated registration context.
+ * @returns {Object} Ledger clinical index payload.
+ */
+function buildClinicalRecordIndex({ record, context }) {
+  return {
+    recordId: record._id || record.recordId || null,
+    patientId: record.patientPseudoId || context.patientPseudoId,
+    encounterId: record.encounterId || null,
+    scopeId: record.scopeId || null,
+    recordType: String(record.recordType || '').toLowerCase(),
+    offchainUri: buildOffchainUri(record._id || record.recordId || null),
+    hash: record.integrity?.payloadHash || null,
+    createdAt: record.createdAt ? new Date(record.createdAt).toISOString() : new Date().toISOString(),
+    createdBy: context.professional.id || context.actor.id || null,
+    authorRole: context.authorRole,
+    status: 'ACTIVE',
+  };
+}
+
 module.exports = {
   normalizeArray,
   getRecordIdentifier,
@@ -180,4 +375,13 @@ module.exports = {
   getEffectiveScopes,
   filterScopeMaterialsByScopes,
   filterReferencesByScopes,
+  normalizeRecordType,
+  getLedgerAuthorRole,
+  toPlainObject,
+  buildOffchainUri,
+  permissionAllowsAction,
+  validateRequestedScopes,
+  buildSignatureRecordPayload,
+  buildClinicalRecordDocument,
+  buildClinicalRecordIndex,
 };

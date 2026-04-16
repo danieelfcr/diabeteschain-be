@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const ClinicalRecordRepository = require('../../repositories/clinicalRecord.repository');
 const FabricClinicalRecordRepository = require('../../repositories/fabricClinicalRecord.repository');
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
@@ -7,12 +8,21 @@ const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
 const { createAppError } = require('../../utils/app-error');
 const {
   getRecordIdentifier,
+  normalizePermission,
   normalizePermissions,
   normalizeScopeMaterials,
   isPermissionActive,
   getEffectiveScopes,
   filterScopeMaterialsByScopes,
   filterReferencesByScopes,
+  normalizeRecordType,
+  getLedgerAuthorRole,
+  toPlainObject,
+  permissionAllowsAction,
+  validateRequestedScopes,
+  buildSignatureRecordPayload,
+  buildClinicalRecordDocument,
+  buildClinicalRecordIndex,
 } = require('../../utils/clinicalRecord.utils');
 
 /**
@@ -47,6 +57,262 @@ class ClinicalRecordOrchestrationService {
     }
 
     return source?.role?.name || source?.role || source?.name || null;
+  }
+
+  /**
+   * Verify a detached request signature with the actor public key.
+   *
+   * @param {Object} input - Signature verification input.
+   * @param {string} input.publicKey - Actor public key.
+   * @param {Object} input.payload - Structured payload signed by the client.
+   * @param {string} input.signature - Base64 detached signature.
+   * @param {string} input.errorMessage - Error message used on failure.
+   */
+  async verifyRequestSignature({ publicKey, payload, signature, errorMessage }) {
+    if (!publicKey) {
+      throw createAppError('Authenticated actor public key is required', 400);
+    }
+
+    let isSignatureValid = false;
+
+    try {
+      isSignatureValid = await this.identityRepository.verifySignature({
+        publicKey,
+        payload,
+        signature,
+      });
+    } catch (error) {
+      isSignatureValid = false;
+    }
+
+    if (!isSignatureValid) {
+      throw createAppError(errorMessage, 400);
+    }
+  }
+
+  /**
+   * Resolve and validate the shared context required to register clinical events.
+   *
+   * @param {Object} options - Context resolution options.
+   * @param {Object} options.actor - Authenticated actor.
+   * @param {string} options.requiredRole - Expected healthcare professional role.
+   * @param {string} options.patientPseudoId - Target patient pseudo identifier.
+   * @param {Object} options.signaturePayload - Structured signature payload.
+   * @param {string} options.signature - Detached signature provided by the client.
+   * @param {string[]} options.requestedScopes - Requested clinical scopes.
+   * @param {string} options.invalidSignatureMessage - Error message for invalid signature.
+   * @returns {Promise<Object>} Validated registration context.
+   */
+  async resolveClinicalRegistrationContext({
+    actor,
+    requiredRole,
+    patientPseudoId,
+    signaturePayload,
+    signature,
+    requestedScopes,
+    invalidSignatureMessage,
+  }) {
+    // 1. Validate the authenticated actor and role.
+    if (!actor) {
+      throw createAppError('Authentication required to register clinical events', 401);
+    }
+
+    const actorRole = this.getRoleName(actor)?.toUpperCase() || null;
+    if (actorRole !== requiredRole) {
+      throw createAppError(`Only users with ${requiredRole} role can register this clinical event`, 403);
+    }
+
+    const professionalId = actor.id || null;
+    if (!professionalId) {
+      throw createAppError('Authenticated professional id is required', 400);
+    }
+
+    if (!patientPseudoId) {
+      throw createAppError('Missing required field: patientPseudoId', 400);
+    }
+
+    if (!signature) {
+      throw createAppError('Missing required field: signature', 400);
+    }
+
+    // 2. Resolve patient and professional identities from trusted sources.
+    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
+    if (!patient) {
+      throw createAppError('Patient not found in identity repository', 404);
+    }
+
+    const professional = await this.identityRepository.findUserById(professionalId);
+    if (!professional) {
+      throw createAppError('Authenticated professional not found in identity repository', 404);
+    }
+
+    const professionalRole = this.getRoleName(professional)?.toUpperCase() || null;
+    if (professionalRole !== requiredRole) {
+      throw createAppError(`Authenticated user must have ${requiredRole} role`, 403);
+    }
+
+    // 3. Verify the signature before persisting anything.
+    await this.verifyRequestSignature({
+      publicKey: professional.publicKey,
+      payload: signaturePayload,
+      signature,
+      errorMessage: invalidSignatureMessage,
+    });
+
+    // 4. Re-check the active write permission in blockchain.
+    const permission = normalizePermission(
+      await this.fabricPermissionRepository.getActivePermissionByPatientAndGrantee(
+        patientPseudoId,
+        professional.id
+      )
+    );
+
+    if (!permission || !isPermissionActive(permission)) {
+      throw createAppError('No active write access grant found for this patient and professional', 404);
+    }
+
+    if (!permissionAllowsAction(permission, 'write')) {
+      throw createAppError('The active permission does not allow write access', 403);
+    }
+
+    validateRequestedScopes(permission, requestedScopes);
+
+    return {
+      actor,
+      patient,
+      professional,
+      professionalRole,
+      authorRole: getLedgerAuthorRole(professionalRole),
+      patientPseudoId,
+      permission,
+    };
+  }
+
+  /**
+   * Resolve and validate the record that a new event is based on.
+   *
+   * @param {Object} options - Base record lookup options.
+   * @param {string} options.patientPseudoId - Target patient pseudo identifier.
+   * @param {string} options.recordId - Record identifier referenced by basedOn.
+   * @param {string} options.expectedRecordType - Expected base record type.
+   * @param {string} options.label - Human-readable record label for errors.
+   * @returns {Promise<{record: Object, reference: Object}>} Base record and ledger reference.
+   */
+  async resolveBaseClinicalRecord({ patientPseudoId, recordId, expectedRecordType, label }) {
+    if (!recordId) {
+      throw createAppError('Missing required field: basedOn', 400);
+    }
+
+    const baseRecord = await this.clinicalRecordRepository.findById(recordId);
+    if (!baseRecord) {
+      throw createAppError(`${label} not found`, 404);
+    }
+
+    if (baseRecord.patientPseudoId !== patientPseudoId) {
+      throw createAppError(`${label} does not belong to the provided patient`, 400);
+    }
+
+    if (normalizeRecordType(baseRecord.recordType) !== expectedRecordType) {
+      throw createAppError(`${label} must be a ${expectedRecordType}`, 400);
+    }
+
+    const baseReference = await this.fabricClinicalRecordRepository.getClinicalRecordIndexByRecordId(
+      patientPseudoId,
+      recordId
+    );
+
+    if (!baseReference) {
+      throw createAppError(`${label} clinical index not found in blockchain`, 404);
+    }
+
+    const referenceRecordType = normalizeRecordType(baseReference.recordType);
+    if (referenceRecordType && referenceRecordType !== expectedRecordType) {
+      throw createAppError(`${label} blockchain index does not match the expected record type`, 400);
+    }
+
+    const referenceStatus = baseReference.status?.toUpperCase() || null;
+    if (referenceStatus && referenceStatus !== 'ACTIVE') {
+      throw createAppError(`${label} is not active`, 400);
+    }
+
+    return {
+      record: baseRecord,
+      reference: baseReference,
+    };
+  }
+
+  /**
+   * Persist one clinical record and register its blockchain index.
+   *
+   * @param {Object} options - Registration options.
+   * @returns {Promise<{record: Object, index: Object}>} Registered record response.
+   */
+  async registerClinicalRecordEvent(options) {
+    const context = options.context || await this.resolveClinicalRegistrationContext({
+      actor: options.actor,
+      requiredRole: options.requiredRole,
+      patientPseudoId: options.patientPseudoId,
+      signaturePayload: options.signaturePayload,
+      signature: options.signature,
+      requestedScopes: options.requestedScopes,
+      invalidSignatureMessage: options.invalidSignatureMessage,
+    });
+
+    const recordInput = options.recordInput || null;
+    if (!recordInput) {
+      throw createAppError('Clinical record payload is required', 400);
+    }
+
+    // 1. Validate the target scope against the active permission.
+    validateRequestedScopes(context.permission, [recordInput.scopeId]);
+
+    const recordId = options.recordId || crypto.randomUUID();
+    const encounterId = options.encounterId !== undefined
+      ? options.encounterId
+      : options.recordType === 'ENCOUNTER'
+        ? recordId
+        : null;
+
+    const clinicalRecordData = buildClinicalRecordDocument({
+      recordId,
+      patientPseudoId: context.patientPseudoId,
+      recordType: options.recordType,
+      recordInput,
+      encounterId,
+      relationships: options.relationships,
+    });
+
+    let savedRecord = null;
+
+    try {
+      // 2. Persist the encrypted record in MongoDB.
+      savedRecord = await this.clinicalRecordRepository.create(clinicalRecordData);
+      const savedRecordObject = toPlainObject(savedRecord);
+
+      // 3. Register the matching clinical index in blockchain.
+      const clinicalRecordIndex = buildClinicalRecordIndex({
+        record: savedRecordObject,
+        context,
+      });
+
+      const registeredIndex = await this.fabricClinicalRecordRepository.registerClinicalRecordIndex(
+        clinicalRecordIndex
+      );
+
+      return {
+        record: mapClinicalRecord(
+          savedRecordObject,
+          registeredIndex && typeof registeredIndex === 'object' ? registeredIndex : clinicalRecordIndex
+        ),
+        index: registeredIndex && typeof registeredIndex === 'object' ? registeredIndex : clinicalRecordIndex,
+      };
+    } catch (error) {
+      if (savedRecord?._id) {
+        await this.clinicalRecordRepository.deleteById(recordId).catch(() => null);
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -167,7 +433,7 @@ class ClinicalRecordOrchestrationService {
 
     // 3. Validate the permission semantics required for delegated history access
     const readablePermissions = normalizedPermissions.filter(
-      (permission) => isPermissionActive(permission) && permission.allowedActions.includes('read')
+      (permission) => isPermissionActive(permission) && permissionAllowsAction(permission, 'read')
     );
 
     if (readablePermissions.length === 0) {
@@ -271,44 +537,150 @@ class ClinicalRecordOrchestrationService {
   }
 
   /**
-   * Coordinate doctor clinical event registration.
+   * Coordinate doctor consultation registration.
    *
    * @param {Object} payload - Request payload submitted by the client.
    * @param {Object} actor - Authenticated user context.
-   * @returns {Promise<Object>} Placeholder orchestration response.
+   * @returns {Promise<Object>} Orchestration response.
    */
-  async registerDoctorEvent(payload, actor) {
+  async registerDoctorConsultation(payload, actor) {
+    // 1. Build the explicit signature payload for the full consultation request.
+    const signaturePayload = {
+      patientPseudoId: payload.patientPseudoId,
+      action: 'REGISTER_DOCTOR_CONSULTATION',
+      encounter: buildSignatureRecordPayload(payload.encounter, 'ENCOUNTER'),
+      labOrder: payload.labOrder
+        ? buildSignatureRecordPayload(payload.labOrder, 'LAB_ORDER')
+        : null,
+      prescription: payload.prescription
+        ? buildSignatureRecordPayload(payload.prescription, 'MEDICAL_PRESCRIPTION')
+        : null,
+    };
+
+    const requestedScopes = [
+      payload.encounter?.scopeId,
+      payload.labOrder?.scopeId,
+      payload.prescription?.scopeId,
+    ].filter(Boolean);
+
+    // 2. Resolve the shared validated context once for the whole request.
+    const context = await this.resolveClinicalRegistrationContext({
+      actor,
+      requiredRole: 'DOCTOR',
+      patientPseudoId: payload.patientPseudoId,
+      signaturePayload,
+      signature: payload.signature,
+      requestedScopes,
+      invalidSignatureMessage: 'Invalid signature for doctor consultation registration',
+    });
+
+    // 3. Register the root encounter record.
+    const encounterRegistration = await this.registerClinicalRecordEvent({
+      context,
+      recordType: 'ENCOUNTER',
+      recordInput: payload.encounter,
+    });
+
+    const encounterId = encounterRegistration.record.recordId;
+
+    // 4. Register optional child records linked to the encounter.
+    const labOrderRegistration = payload.labOrder
+      ? await this.registerClinicalRecordEvent({
+          context,
+          recordType: 'LAB_ORDER',
+          recordInput: payload.labOrder,
+          encounterId,
+          relationships: {
+            partOf: encounterId,
+          },
+        })
+      : null;
+
+    const prescriptionRegistration = payload.prescription
+      ? await this.registerClinicalRecordEvent({
+          context,
+          recordType: 'MEDICAL_PRESCRIPTION',
+          recordInput: payload.prescription,
+          encounterId,
+          relationships: {
+            partOf: encounterId,
+          },
+        })
+      : null;
+
     return {
-      message: 'Doctor event orchestration pending implementation',
-      status: 'pending_implementation',
-      action: 'register_doctor_event',
-      actor: this.mapActor(actor),
-      payload,
-      integrationPoints: [
-        'FabricClinicalRecordRepository.appendDoctorEvent',
-        'ClinicalRecordRepository.create',
-      ],
+      message: 'Doctor consultation records registered successfully',
+      status: 'success',
+      action: 'register_doctor_consultation',
+      patientPseudoId: context.patientPseudoId,
+      encounter: encounterRegistration.record,
+      labOrder: labOrderRegistration ? labOrderRegistration.record : null,
+      prescription: prescriptionRegistration ? prescriptionRegistration.record : null,
     };
   }
 
   /**
-   * Coordinate laboratory event registration.
+   * Coordinate laboratory result registration.
    *
    * @param {Object} payload - Request payload submitted by the client.
    * @param {Object} actor - Authenticated user context.
-   * @returns {Promise<Object>} Placeholder orchestration response.
+   * @returns {Promise<Object>} Orchestration response.
    */
-  async registerLaboratoryEvent(payload, actor) {
+  async registerLaboratoryResult(payload, actor) {
+    // 1. Build the explicit signature payload for the lab result request.
+    const signaturePayload = {
+      patientPseudoId: payload.patientPseudoId,
+      action: 'REGISTER_LABORATORY_RESULT',
+      basedOn: payload.basedOn,
+      scopeId: payload.scopeId,
+      payloadMetadata: payload.payloadMetadata,
+      encryption: payload.encryption,
+      integrity: payload.integrity,
+    };
+
+    // 2. Resolve the validated shared context.
+    const context = await this.resolveClinicalRegistrationContext({
+      actor,
+      requiredRole: 'LABORATORY',
+      patientPseudoId: payload.patientPseudoId,
+      signaturePayload,
+      signature: payload.signature,
+      requestedScopes: [payload.scopeId],
+      invalidSignatureMessage: 'Invalid signature for laboratory result registration',
+    });
+
+    // 3. Resolve the base laboratory order referenced by basedOn.
+    const baseRecordContext = await this.resolveBaseClinicalRecord({
+      patientPseudoId: context.patientPseudoId,
+      recordId: payload.basedOn,
+      expectedRecordType: 'LAB_ORDER',
+      label: 'Laboratory order',
+    });
+
+    const encounterId = baseRecordContext.record.encounterId || null;
+
+    // 4. Register the laboratory result linked to the previous order.
+    const registration = await this.registerClinicalRecordEvent({
+      context,
+      recordType: 'LAB_RESULT',
+      recordInput: {
+        scopeId: payload.scopeId,
+        payloadMetadata: payload.payloadMetadata,
+        encryption: payload.encryption,
+        integrity: payload.integrity,
+      },
+      encounterId,
+      relationships: {
+        basedOn: baseRecordContext.record._id || payload.basedOn,
+        partOf: encounterId || null,
+      },
+    });
+
     return {
-      message: 'Laboratory event orchestration pending implementation',
-      status: 'pending_implementation',
-      action: 'register_laboratory_event',
-      actor: this.mapActor(actor),
-      payload,
-      integrationPoints: [
-        'FabricClinicalRecordRepository.appendLaboratoryEvent',
-        'ClinicalRecordRepository.create',
-      ],
+      message: 'Laboratory result registered successfully',
+      status: 'success',
+      action: 'register_laboratory_result',
+      record: registration.record,
     };
   }
 
@@ -317,19 +689,63 @@ class ClinicalRecordOrchestrationService {
    *
    * @param {Object} payload - Request payload submitted by the client.
    * @param {Object} actor - Authenticated user context.
-   * @returns {Promise<Object>} Placeholder orchestration response.
+   * @returns {Promise<Object>} Orchestration response.
    */
   async registerPharmacyDispatch(payload, actor) {
+    // 1. Build the explicit signature payload for the pharmacy request.
+    const signaturePayload = {
+      patientPseudoId: payload.patientPseudoId,
+      action: 'REGISTER_PHARMACY_DISPATCH',
+      basedOn: payload.basedOn,
+      scopeId: payload.scopeId,
+      payloadMetadata: payload.payloadMetadata,
+      encryption: payload.encryption,
+      integrity: payload.integrity,
+    };
+
+    // 2. Resolve the validated shared context.
+    const context = await this.resolveClinicalRegistrationContext({
+      actor,
+      requiredRole: 'PHARMACIST',
+      patientPseudoId: payload.patientPseudoId,
+      signaturePayload,
+      signature: payload.signature,
+      requestedScopes: [payload.scopeId],
+      invalidSignatureMessage: 'Invalid signature for pharmacy dispatch registration',
+    });
+
+    // 3. Resolve the base prescription referenced by basedOn.
+    const baseRecordContext = await this.resolveBaseClinicalRecord({
+      patientPseudoId: context.patientPseudoId,
+      recordId: payload.basedOn,
+      expectedRecordType: 'MEDICAL_PRESCRIPTION',
+      label: 'Medical prescription',
+    });
+
+    const encounterId = baseRecordContext.record.encounterId || null;
+
+    // 4. Register the pharmacy dispatch linked to the prescription.
+    const registration = await this.registerClinicalRecordEvent({
+      context,
+      recordType: 'PHARMACY_DISPATCH',
+      recordInput: {
+        scopeId: payload.scopeId,
+        payloadMetadata: payload.payloadMetadata,
+        encryption: payload.encryption,
+        integrity: payload.integrity,
+      },
+      encounterId,
+      relationships: {
+        basedOn: baseRecordContext.record._id || payload.basedOn,
+        partOf: encounterId || null,
+      },
+    });
+
     return {
-      message: 'Pharmacy dispatch orchestration pending implementation',
-      status: 'pending_implementation',
+      message: 'Pharmacy dispatch registered successfully',
+      status: 'success',
       action: 'register_pharmacy_dispatch',
-      actor: this.mapActor(actor),
-      payload,
-      integrationPoints: [
-        'FabricClinicalRecordRepository.appendPharmacyDispatch',
-        'ClinicalRecordRepository.create',
-      ],
+      record: registration.record,
     };
   }
 

@@ -22,6 +22,10 @@ class ClinicalRecordRepository {
     return ClinicalRecordModel.findById(recordId).lean().exec();
   }
 
+  async deleteById(recordId) {
+    return ClinicalRecordModel.findByIdAndDelete(recordId).exec();
+  }
+
   async findAll(filter = {}) {
     const query = {};
 

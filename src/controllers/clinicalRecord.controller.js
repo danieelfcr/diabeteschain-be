@@ -1,5 +1,8 @@
 const ClinicalRecordOrchestrationService = require('../services/orchestration/clinicalRecord.orchestration.service');
 const GetProfessionalHistoryDTO = require('../models/api/clinical-records/get-professional-history.dto');
+const RegisterDoctorConsultationDTO = require('../models/api/clinical-records/register-doctor-consultation.dto');
+const RegisterLaboratoryResultDTO = require('../models/api/clinical-records/register-laboratory-result.dto');
+const RegisterPharmacyDispatchDTO = require('../models/api/clinical-records/register-pharmacy-dispatch.dto');
 
 /**
  * Controller responsible for clinical record HTTP endpoints.
@@ -65,10 +68,11 @@ class ClinicalRecordController {
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async registerDoctorEvent(req, res, next) {
+  async registerDoctorConsultation(req, res, next) {
     try {
-      const result = await this.orchestrationService.registerDoctorEvent(req.body, req.user);
-      return res.status(202).json(result);
+      const payload = req.validatedBody || RegisterDoctorConsultationDTO.from(req.body);
+      const result = await this.orchestrationService.registerDoctorConsultation(payload, req.user);
+      return res.status(201).json(result);
     } catch (error) {
       return next(error);
     }
@@ -83,10 +87,11 @@ class ClinicalRecordController {
    * @returns {Promise<import('express').Response>} JSON response with the
    * orchestration result.
    */
-  async registerLaboratoryEvent(req, res, next) {
+  async registerLaboratoryResult(req, res, next) {
     try {
-      const result = await this.orchestrationService.registerLaboratoryEvent(req.body, req.user);
-      return res.status(202).json(result);
+      const payload = req.validatedBody || RegisterLaboratoryResultDTO.from(req.body);
+      const result = await this.orchestrationService.registerLaboratoryResult(payload, req.user);
+      return res.status(201).json(result);
     } catch (error) {
       return next(error);
     }
@@ -103,11 +108,38 @@ class ClinicalRecordController {
    */
   async registerPharmacyDispatch(req, res, next) {
     try {
-      const result = await this.orchestrationService.registerPharmacyDispatch(req.body, req.user);
-      return res.status(202).json(result);
+      const payload = req.validatedBody || RegisterPharmacyDispatchDTO.from(req.body);
+      const result = await this.orchestrationService.registerPharmacyDispatch(payload, req.user);
+      return res.status(201).json(result);
     } catch (error) {
       return next(error);
     }
+  }
+
+  /**
+   * Backwards-compatible alias for the existing doctor route handler.
+   *
+   * @param {import('express').Request} req - Express request object.
+   * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
+   * @returns {Promise<import('express').Response>} JSON response with the
+   * orchestration result.
+   */
+  async registerDoctorEvent(req, res, next) {
+    return this.registerDoctorConsultation(req, res, next);
+  }
+
+  /**
+   * Backwards-compatible alias for the existing laboratory route handler.
+   *
+   * @param {import('express').Request} req - Express request object.
+   * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
+   * @returns {Promise<import('express').Response>} JSON response with the
+   * orchestration result.
+   */
+  async registerLaboratoryEvent(req, res, next) {
+    return this.registerLaboratoryResult(req, res, next);
   }
 }
 
