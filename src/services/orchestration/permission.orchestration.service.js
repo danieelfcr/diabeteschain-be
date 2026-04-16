@@ -2,6 +2,10 @@ const IdentityRepository = require('../../repositories/identity.repository');
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
 const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
 const { validatePermissionDates, validateActionsAndScopes } = require('../../utils/permission.utils');
+const {
+  buildGrantAccessSignaturePayload,
+  buildRevokeAccessSignaturePayload,
+} = require('../../utils/signaturePayload.utils');
 const { createAppError } = require('../../utils/app-error');
 
 /**
@@ -30,10 +34,11 @@ class PermissionOrchestrationService {
     }
 
     if (typeof source === 'string') {
-      return source;
+      return source.trim().toUpperCase() || null;
     }
 
-    return source?.role?.name || source?.role || source?.name || null;
+    const resolvedRole = source?.role?.name || source?.role || source?.name || null;
+    return typeof resolvedRole === 'string' ? resolvedRole.trim().toUpperCase() || null : null;
   }
 
   /**
@@ -78,19 +83,22 @@ class PermissionOrchestrationService {
     }
     
     // 1.5 Validate permission dates and allowed actions/scopes
-    validatePermissionDates(payload.validFrom, payload.validTo);
-    validateActionsAndScopes(payload.allowedActions, payload.allowedScopes);
+    const { validFrom, validTo } = validatePermissionDates(payload.validFrom, payload.validTo);
+    const { allowedActions, allowedScopes } = validateActionsAndScopes(
+      payload.allowedActions,
+      payload.allowedScopes
+    );
 
     // 2. Verify signed permission with patient's public key
-    const signaturePayload = {
-      patientPseudoId: patientPseudoId,
+    const signaturePayload = buildGrantAccessSignaturePayload({
+      patientPseudoId,
       granteeId: grantee.id,
-      allowedActions: payload.allowedActions,
-      allowedScopes: payload.allowedScopes,
-      validFrom: payload.validFrom,
-      validTo: payload.validTo,
-    };
-    //
+      allowedActions,
+      allowedScopes,
+      validFrom,
+      validTo,
+    });
+
     const isSignatureValid = await this.identityRepository.verifySignature({
       publicKey: patient.publicKey,
       payload: signaturePayload,
@@ -114,7 +122,7 @@ class PermissionOrchestrationService {
     const kfragDistribution = await this.proxyReencryptionClient.distributeKFrags({
       patientPseudoId: patientPseudoId,
       granteeId: grantee.id,
-      allowedScopes: payload.allowedScopes,
+      allowedScopes,
       kfrags: payload.kfrags,
       proxies: selectedProxies,
       status: 'PENDING'
@@ -125,10 +133,10 @@ class PermissionOrchestrationService {
       patientId: patientPseudoId,
       granteeId: grantee.id,
       granteeRole: granteeRole,
-      allowedActions: payload.allowedActions,
-      allowedScopes: payload.allowedScopes,
-      validFrom: payload.validFrom,
-      validTo: payload.validTo,
+      allowedActions,
+      allowedScopes,
+      validFrom,
+      validTo,
       proxyIds: selectedProxies.map((p) => p.id),
       createdBy: actor.id,
       signature: payload.signature,
@@ -189,11 +197,10 @@ class PermissionOrchestrationService {
     }
 
     // 2. Verify the signed revoke intent with the patient's public key.
-    const signaturePayload = {
+    const signaturePayload = buildRevokeAccessSignaturePayload({
       patientPseudoId,
       granteeId: grantee.id,
-      action: 'REVOKE_ACCESS',
-    };
+    });
 
     const isSignatureValid = await this.identityRepository.verifySignature({
       publicKey: patient.publicKey,

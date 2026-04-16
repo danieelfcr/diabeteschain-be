@@ -20,10 +20,14 @@ const {
   toPlainObject,
   permissionAllowsAction,
   validateRequestedScopes,
-  buildSignatureRecordPayload,
   buildClinicalRecordDocument,
   buildClinicalRecordIndex,
 } = require('../../utils/clinicalRecord.utils');
+const {
+  buildDoctorConsultationSignaturePayload,
+  buildLaboratoryResultSignaturePayload,
+  buildPharmacyDispatchSignaturePayload,
+} = require('../../utils/signaturePayload.utils');
 
 /**
  * Service responsible for coordinating clinical record use cases.
@@ -53,10 +57,11 @@ class ClinicalRecordOrchestrationService {
     }
 
     if (typeof source === 'string') {
-      return source;
+      return source.trim().toUpperCase() || null;
     }
 
-    return source?.role?.name || source?.role || source?.name || null;
+    const resolvedRole = source?.role?.name || source?.role || source?.name || null;
+    return typeof resolvedRole === 'string' ? resolvedRole.trim().toUpperCase() || null : null;
   }
 
   /**
@@ -117,7 +122,7 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Authentication required to register clinical events', 401);
     }
 
-    const actorRole = this.getRoleName(actor)?.toUpperCase() || null;
+    const actorRole = this.getRoleName(actor);
     if (actorRole !== requiredRole) {
       throw createAppError(`Only users with ${requiredRole} role can register this clinical event`, 403);
     }
@@ -387,7 +392,7 @@ class ClinicalRecordOrchestrationService {
     }
 
     const validRoles = ['DOCTOR', 'LABORATORY', 'PHARMACIST'];
-    const actorRole = this.getRoleName(actor)?.toUpperCase() || null;
+    const actorRole = this.getRoleName(actor);
     if (!validRoles.includes(actorRole)) {
       throw createAppError('Only healthcare professionals can retrieve delegated history', 403);
     }
@@ -415,7 +420,7 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Authenticated professional not found in identity repository', 404);
     }
 
-    const professionalRole = this.getRoleName(professional)?.toUpperCase() || null;
+    const professionalRole = this.getRoleName(professional);
     if (!validRoles.includes(professionalRole)) {
       throw createAppError('Authenticated user must have a valid healthcare professional role', 403);
     }
@@ -545,17 +550,7 @@ class ClinicalRecordOrchestrationService {
    */
   async registerDoctorConsultation(payload, actor) {
     // 1. Build the explicit signature payload for the full consultation request.
-    const signaturePayload = {
-      patientPseudoId: payload.patientPseudoId,
-      action: 'REGISTER_DOCTOR_CONSULTATION',
-      encounter: buildSignatureRecordPayload(payload.encounter, 'ENCOUNTER'),
-      labOrder: payload.labOrder
-        ? buildSignatureRecordPayload(payload.labOrder, 'LAB_ORDER')
-        : null,
-      prescription: payload.prescription
-        ? buildSignatureRecordPayload(payload.prescription, 'MEDICAL_PRESCRIPTION')
-        : null,
-    };
+    const signaturePayload = buildDoctorConsultationSignaturePayload(payload);
 
     const requestedScopes = [
       payload.encounter?.scopeId,
@@ -628,15 +623,7 @@ class ClinicalRecordOrchestrationService {
    */
   async registerLaboratoryResult(payload, actor) {
     // 1. Build the explicit signature payload for the lab result request.
-    const signaturePayload = {
-      patientPseudoId: payload.patientPseudoId,
-      action: 'REGISTER_LABORATORY_RESULT',
-      basedOn: payload.basedOn,
-      scopeId: payload.scopeId,
-      payloadMetadata: payload.payloadMetadata,
-      encryption: payload.encryption,
-      integrity: payload.integrity,
-    };
+    const signaturePayload = buildLaboratoryResultSignaturePayload(payload);
 
     // 2. Resolve the validated shared context.
     const context = await this.resolveClinicalRegistrationContext({
@@ -693,15 +680,7 @@ class ClinicalRecordOrchestrationService {
    */
   async registerPharmacyDispatch(payload, actor) {
     // 1. Build the explicit signature payload for the pharmacy request.
-    const signaturePayload = {
-      patientPseudoId: payload.patientPseudoId,
-      action: 'REGISTER_PHARMACY_DISPATCH',
-      basedOn: payload.basedOn,
-      scopeId: payload.scopeId,
-      payloadMetadata: payload.payloadMetadata,
-      encryption: payload.encryption,
-      integrity: payload.integrity,
-    };
+    const signaturePayload = buildPharmacyDispatchSignaturePayload(payload);
 
     // 2. Resolve the validated shared context.
     const context = await this.resolveClinicalRegistrationContext({
