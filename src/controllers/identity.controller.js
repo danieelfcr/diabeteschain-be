@@ -1,4 +1,6 @@
 const IdentityService = require('../services/identity/identity.service');
+const securityConfig = require('../config/security');
+const { signAccessToken } = require('../utils/jwt');
 
 /**
  * Controller that exposes identity-related HTTP endpoints.
@@ -92,10 +94,14 @@ class IdentityController {
         return res.status(400).json({ error: 'Missing required field: password' });
       }
 
-      const user = await this.identityService.loginUser({ email, password });
+      const { user, tokenPayload } = await this.identityService.loginUser({ email, password });
+      const accessToken = signAccessToken(tokenPayload);
 
       return res.status(200).json({
         message: 'Login successful',
+        tokenType: 'Bearer',
+        accessToken,
+        expiresIn: securityConfig.jwt.accessExpiresIn,
         user,
       });
     } catch (error) {

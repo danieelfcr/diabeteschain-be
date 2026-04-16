@@ -43,6 +43,23 @@ class IdentityService {
   }
 
   /**
+   * Build the minimal JWT payload needed by protected routes.
+   *
+   * @param {Object} user - Sanitized authenticated user.
+   * @returns {Object} JWT-safe access token payload.
+   */
+  buildAccessTokenPayload(user) {
+    return {
+      sub: user.id,
+      role: user.role || null,
+      pseudoId: user.pseudoId || null,
+      professionalId: user.professionalId || null,
+      email: user.email || null,
+      username: user.username || null,
+    };
+  }
+
+  /**
    * Validate that a route identifier exists and follows UUID format.
    *
    * @param {string} identifier - Identifier received from the route parameter.
@@ -193,7 +210,12 @@ class IdentityService {
       throw createAppError('User is inactive or blocked', 403, 'AUTH_ERROR');
     }
 
-    return this.sanitizeUser(user);
+    const sanitizedUser = this.sanitizeUser(user);
+
+    return {
+      user: sanitizedUser,
+      tokenPayload: this.buildAccessTokenPayload(sanitizedUser),
+    };
   }
 
   /**
