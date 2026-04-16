@@ -33,7 +33,7 @@ const clinicalRecordController = new ClinicalRecordController();
 router.get(
   '/history/me',
   authMiddleware,
-  //authorizeRoles('PATIENT'),
+  authorizeRoles('PATIENT'),
   clinicalRecordController.getMyHistory.bind(clinicalRecordController)
 );
 
@@ -44,7 +44,7 @@ router.get(
 router.get(
   '/history/:patientPseudoId',
   authMiddleware,
-  //authorizeRoles('DOCTOR', 'LABORATORY', 'PHARMACIST'),
+  authorizeRoles('DOCTOR', 'LABORATORY', 'PHARMACIST'),
   clinicalRecordController.getProfessionalHistory.bind(clinicalRecordController)
 );
 
@@ -55,8 +55,8 @@ router.get(
 router.post(
   '/events/doctor',
   authMiddleware,
+  authorizeRoles('DOCTOR'),
   validateDto(RegisterDoctorConsultationDTO),
-  //authorizeRoles('DOCTOR'),
   clinicalRecordController.registerDoctorConsultation.bind(clinicalRecordController)
 );
 
@@ -67,8 +67,8 @@ router.post(
 router.post(
   '/events/laboratory',
   authMiddleware,
+  authorizeRoles('LABORATORY'),
   validateDto(RegisterLaboratoryResultDTO),
-  //authorizeRoles('LABORATORY'),
   clinicalRecordController.registerLaboratoryResult.bind(clinicalRecordController)
 );
 
@@ -79,8 +79,8 @@ router.post(
 router.post(
   '/events/pharmacy',
   authMiddleware,
+  authorizeRoles('PHARMACIST'),
   validateDto(RegisterPharmacyDispatchDTO),
-  //authorizeRoles('PHARMACIST'),
   clinicalRecordController.registerPharmacyDispatch.bind(clinicalRecordController)
 );
 
