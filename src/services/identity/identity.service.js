@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { Role, Status } = require('../../models/persistence/user.schema');
 const IdentityRepository = require('../../repositories/identity.repository');
+const { createAppError } = require('../../utils/app-error');
 
 /**
  * Service responsible for identity-related business logic.
@@ -30,41 +31,15 @@ class IdentityService {
   sanitizeUser(user) {
     return {
       id: user.id,
-      pseudo_id: user.pseudo_id,
+      pseudoId: user.pseudoId,
       username: user.username,
       email: user.email,
       role: user.role?.name || null,
-      professional_id: user.professional_id,
+      professionalId: user.professionalId,
       status: user.status?.name || null,
-      created_at: user.created_at,
-      updated_at: user.updated_at,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
-  }
-
-  /**
-   * Create a structured authentication error with an HTTP status code.
-   *
-   * @param {string} message - The error message to return.
-   * @param {number} statusCode - HTTP status code associated with the error.
-   * @returns {Error} Error object with a statusCode property.
-   */
-  createAuthError(message, statusCode) {
-    const error = new Error(message);
-    error.statusCode = statusCode;
-    return error;
-  }
-
-  /**
-   * Create a generic service error with an HTTP status code.
-   *
-   * @param {string} message - The error message to return.
-   * @param {number} statusCode - HTTP status code associated with the error.
-   * @returns {Error} Error object with a statusCode property.
-   */
-  createServiceError(message, statusCode) {
-    const error = new Error(message);
-    error.statusCode = statusCode;
-    return error;
   }
 
   /**
@@ -76,11 +51,11 @@ class IdentityService {
    */
   validateUuidIdentifier(identifier, fieldName) {
     if (!identifier) {
-      throw this.createServiceError(`Missing required parameter: ${fieldName}`, 400);
+      throw createAppError(`Missing required parameter: ${fieldName}`, 400);
     }
 
     if (!this.getUuidRegex().test(identifier)) {
-      throw this.createServiceError(`Invalid ${fieldName} format`, 400);
+      throw createAppError(`Invalid ${fieldName} format`, 400);
     }
   }
 
@@ -94,31 +69,31 @@ class IdentityService {
    */
   mapPublicKeyResponse(user, userType) {
     if (!user) {
-      throw this.createServiceError('User not found', 404);
+      throw createAppError('User not found', 404);
     }
 
     const isPatient = user.role?.name === 'PATIENT';
 
     if (userType === 'patient' && !isPatient) {
-      throw this.createServiceError('User not found', 404);
+      throw createAppError('User not found', 404);
     }
 
     if (userType === 'professional' && isPatient) {
-      throw this.createServiceError('User not found', 404);
+      throw createAppError('User not found', 404);
     }
 
-    if (!user.public_key) {
-      throw this.createServiceError('Public key not found for this user', 404);
+    if (!user.publicKey) {
+      throw createAppError('Public key not found for this user', 404);
     }
 
     const response = {
       username: user.username,
       role: user.role?.name || null,
-      public_key: user.public_key,
+      publicKey: user.publicKey,
     };
 
     if (isPatient) {
-      response.pseudo_id = user.pseudo_id;
+      response.pseudoId = user.pseudoId;
       return response;
     }
 
@@ -135,7 +110,7 @@ class IdentityService {
    * @throws {Error} When validation or persistence fails.
    */
   async registerUser(userData) {
-    const { role, professional_id, email, password, ...otherFields } = userData;
+    const { role, professionalId, email, password, ...otherFields } = userData;
 
     // Validate that the provided role is permitted for registration.
     const allowedRoles = ['PATIENT', 'DOCTOR', 'PHARMACIST', 'LABORATORY'];
@@ -143,13 +118,13 @@ class IdentityService {
       throw new Error('Invalid role. Allowed roles: PATIENT, DOCTOR, PHARMACIST, LABORATORY');
     }
 
-    // Assign a pseudo_id only for patients; other roles must provide a professional identifier.
-    let pseudo_id = null;
+    // Assign a pseudoId only for patients; other roles must provide a professional identifier.
+    let pseudoId = null;
     if (role === 'PATIENT') {
-      pseudo_id = crypto.randomUUID();
+      pseudoId = crypto.randomUUID();
     } else {
-      if (!professional_id) {
-        throw new Error('professional_id is required for non-PATIENT roles');
+      if (!professionalId) {
+        throw new Error('professionalId is required for non-PATIENT roles');
       }
     }
 
@@ -161,30 +136,30 @@ class IdentityService {
 
     // Hash the password before persisting it.
     const saltRounds = 10;
-    const password_hash = await bcrypt.hash(password, saltRounds);
+    const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // Resolve role and status references from catalog tables.
     const roleRecord = await Role.findOne({ where: { name: role } });
     if (!roleRecord) {
       throw new Error('Role not found');
     }
-    const role_id = roleRecord.id;
+    const roleId = roleRecord.id;
 
     const statusRecord = await Status.findOne({ where: { name: 'ACTIVE' } });
     if (!statusRecord) {
       throw new Error('Status ACTIVE not found');
     }
-    const status_id = statusRecord.id;
+    const statusId = statusRecord.id;
 
     // Compose the payload to persist a new user.
     const newUserData = {
       ...otherFields,
-      pseudo_id,
-      professional_id: role === 'PATIENT' ? null : professional_id,
+      pseudoId,
+      professionalId: role === 'PATIENT' ? null : professionalId,
       email,
-      password_hash,
-      role_id,
-      status_id,
+      passwordHash,
+      roleId,
+      statusId,
     };
 
     // Persist the user record and return the resulting object.
@@ -206,16 +181,16 @@ class IdentityService {
 
     const user = await this.repository.findAuthUserByEmail(email);
     if (!user) {
-      throw this.createAuthError('Invalid credentials', 401);
+      throw createAppError('Invalid credentials', 401, 'AUTH_ERROR');
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      throw this.createAuthError('Invalid credentials', 401);
+      throw createAppError('Invalid credentials', 401, 'AUTH_ERROR');
     }
 
     if (user.status?.name !== 'ACTIVE') {
-      throw this.createAuthError('User is inactive or blocked', 403);
+      throw createAppError('User is inactive or blocked', 403, 'AUTH_ERROR');
     }
 
     return this.sanitizeUser(user);

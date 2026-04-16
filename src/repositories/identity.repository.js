@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { User, Role, Status } = require('../models/persistence/user.schema');
 
 /**
@@ -94,12 +95,34 @@ class IdentityRepository {
   async findUserByPseudoId(pseudoId) {
     try {
       return await User.findOne({
-        where: { pseudo_id: pseudoId },
+        where: { pseudoId },
         include: [{ model: Role, as: 'role' }],
       });
     } catch (error) {
       throw new Error(`Error finding user by pseudo id: ${error.message}`);
     }
+  }
+
+  /**
+   * Verify a detached signature against a JSON payload using the provided
+   * public key.
+   *
+   * @param {Object} input - Signature verification input.
+   * @param {string} input.publicKey - PEM encoded public key.
+   * @param {Object} input.payload - Structured payload signed by the client.
+   * @param {string} input.signature - Base64 encoded detached signature.
+   * @returns {boolean} True when the signature is valid.
+   */
+  verifySignature({ publicKey, payload, signature }) {
+    if (!publicKey || !payload || !signature) {
+      return false;
+    }
+
+    const verifier = crypto.createVerify('SHA256');
+    verifier.update(JSON.stringify(payload));
+    verifier.end();
+
+    return verifier.verify(publicKey, signature, 'base64');
   }
 }
 

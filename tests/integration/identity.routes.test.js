@@ -14,18 +14,18 @@ const buildRegisterPayload = (overrides = {}) => ({
   username: 'patient_user',
   email: 'patient@example.com',
   password: 'StrongPassword123!',
-  cui_hash: 'cui-hash-001',
-  first_name: 'Ana',
-  middle_name: 'Maria',
-  first_last_name: 'Lopez',
-  second_last_name: 'Perez',
+  cuiHash: 'cui-hash-001',
+  firstName: 'Ana',
+  middleName: 'Maria',
+  firstLastName: 'Lopez',
+  secondLastName: 'Perez',
   role: 'PATIENT',
-  public_key: 'patient-public-key',
-  encrypted_private_key_by_password: 'enc-private-password',
-  password_kdf_salt: 'password-salt',
-  encrypted_private_key_by_recovery: 'enc-private-recovery',
-  recovery_kdf_salt: 'recovery-salt',
-  recovery_key_hash: 'recovery-hash-001',
+  publicKey: 'patient-public-key',
+  encryptedPrivateKeyByPassword: 'enc-private-password',
+  passwordKdfSalt: 'password-salt',
+  encryptedPrivateKeyByRecovery: 'enc-private-recovery',
+  recoveryKdfSalt: 'recovery-salt',
+  recoveryKeyHash: 'recovery-hash-001',
   ...overrides,
 });
 
@@ -52,24 +52,24 @@ const createUser = async (overrides = {}) => {
   return User.create({
     username: overrides.username || uniqueValue('user'),
     email: overrides.email || `${uniqueValue('user')}@example.com`,
-    password_hash: passwordHash,
-    cui_hash: overrides.cui_hash || uniqueValue('cui'),
-    first_name: overrides.first_name || 'Test',
-    middle_name: overrides.middle_name || 'Middle',
-    first_last_name: overrides.first_last_name || 'User',
-    second_last_name: overrides.second_last_name || 'Lastname',
-    role_id: roleId,
-    status_id: statusId,
-    pseudo_id:
-      overrides.pseudo_id === undefined ? (roleName === 'PATIENT' ? crypto.randomUUID() : null) : overrides.pseudo_id,
-    professional_id:
-      overrides.professional_id === undefined ? (roleName === 'PATIENT' ? null : uniqueValue('PRO')) : overrides.professional_id,
-    public_key: overrides.public_key === undefined ? 'public-key-value' : overrides.public_key,
-    encrypted_private_key_by_password: overrides.encrypted_private_key_by_password || 'enc-private-password',
-    password_kdf_salt: overrides.password_kdf_salt || 'password-salt',
-    encrypted_private_key_by_recovery: overrides.encrypted_private_key_by_recovery || 'enc-private-recovery',
-    recovery_kdf_salt: overrides.recovery_kdf_salt || 'recovery-salt',
-    recovery_key_hash: overrides.recovery_key_hash || uniqueValue('recovery'),
+    passwordHash: passwordHash,
+    cuiHash: overrides.cuiHash || uniqueValue('cui'),
+    firstName: overrides.firstName || 'Test',
+    middleName: overrides.middleName || 'Middle',
+    firstLastName: overrides.firstLastName || 'User',
+    secondLastName: overrides.secondLastName || 'Lastname',
+    roleId: roleId,
+    statusId: statusId,
+    pseudoId:
+      overrides.pseudoId === undefined ? (roleName === 'PATIENT' ? crypto.randomUUID() : null) : overrides.pseudoId,
+    professionalId:
+      overrides.professionalId === undefined ? (roleName === 'PATIENT' ? null : uniqueValue('PRO')) : overrides.professionalId,
+    publicKey: overrides.publicKey === undefined ? 'public-key-value' : overrides.publicKey,
+    encryptedPrivateKeyByPassword: overrides.encryptedPrivateKeyByPassword || 'enc-private-password',
+    passwordKdfSalt: overrides.passwordKdfSalt || 'password-salt',
+    encryptedPrivateKeyByRecovery: overrides.encryptedPrivateKeyByRecovery || 'enc-private-recovery',
+    recoveryKdfSalt: overrides.recoveryKdfSalt || 'recovery-salt',
+    recoveryKeyHash: overrides.recoveryKeyHash || uniqueValue('recovery'),
   });
 };
 
@@ -99,62 +99,62 @@ describe('Identity routes integration', () => {
 
       const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
       expect(persistedUser).not.toBeNull();
-      expect(persistedUser.password_hash).not.toBe('StrongPassword123!');
+      expect(persistedUser.passwordHash).not.toBe('StrongPassword123!');
     });
 
-    it('debe generar pseudo_id automaticamente si role = PATIENT', async () => {
+    it('debe generar pseudoId automaticamente si role = PATIENT', async () => {
       const response = await request(app)
         .post('/auth/register')
         .send(buildRegisterPayload());
 
       expect(response.status).toBe(201);
-      expect(response.body.user.pseudo_id).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/i));
+      expect(response.body.user.pseudoId).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/i));
 
       const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
-      expect(persistedUser.pseudo_id).toBe(response.body.user.pseudo_id);
-      expect(persistedUser.professional_id).toBeNull();
+      expect(persistedUser.pseudoId).toBe(response.body.user.pseudoId);
+      expect(persistedUser.professionalId).toBeNull();
     });
 
-    it('debe registrar correctamente un profesional con professional_id', async () => {
+    it('debe registrar correctamente un profesional con professionalId', async () => {
       const response = await request(app)
         .post('/auth/register')
         .send(
           buildRegisterPayload({
             username: 'doctor_user',
             email: 'doctor@example.com',
-            cui_hash: 'cui-hash-002',
+            cuiHash: 'cui-hash-002',
             role: 'DOCTOR',
-            professional_id: 'COL-12345',
-            recovery_key_hash: 'recovery-hash-002',
+            professionalId: 'COL-12345',
+            recoveryKeyHash: 'recovery-hash-002',
           })
         );
 
       expect(response.status).toBe(201);
-      expect(response.body.user.professional_id).toBe('COL-12345');
+      expect(response.body.user.professionalId).toBe('COL-12345');
       expect(response.body.user.role).toBe('DOCTOR');
 
       const persistedUser = await User.findOne({ where: { email: 'doctor@example.com' } });
-      expect(persistedUser.professional_id).toBe('COL-12345');
-      expect(persistedUser.pseudo_id).toBeNull();
+      expect(persistedUser.professionalId).toBe('COL-12345');
+      expect(persistedUser.pseudoId).toBeNull();
     });
 
-    it('debe fallar con 400 si el profesional no envia professional_id', async () => {
+    it('debe fallar con 400 si el profesional no envia professionalId', async () => {
       const payload = buildRegisterPayload({
         username: 'lab_user',
         email: 'lab@example.com',
-        cui_hash: 'cui-hash-003',
+        cuiHash: 'cui-hash-003',
         role: 'LABORATORY',
-        recovery_key_hash: 'recovery-hash-003',
+        recoveryKeyHash: 'recovery-hash-003',
       });
 
-      delete payload.professional_id;
+      delete payload.professionalId;
 
       const response = await request(app)
         .post('/auth/register')
         .send(payload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('professional_id is required');
+      expect(response.body.error).toContain('professionalId is required');
     });
 
     it('debe fallar con 409 si el email ya existe', async () => {
@@ -164,8 +164,8 @@ describe('Identity routes integration', () => {
       const response = await request(app).post('/auth/register').send({
         ...payload,
         username: 'patient_user_2',
-        cui_hash: 'cui-hash-004',
-        recovery_key_hash: 'recovery-hash-004',
+        cuiHash: 'cui-hash-004',
+        recoveryKeyHash: 'recovery-hash-004',
       });
 
       expect(response.status).toBe(409);
@@ -178,9 +178,9 @@ describe('Identity routes integration', () => {
         .send(buildRegisterPayload());
 
       const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
-      expect(persistedUser.password_hash).toBeDefined();
-      expect(persistedUser.password_hash).not.toBe('StrongPassword123!');
-      expect(await bcrypt.compare('StrongPassword123!', persistedUser.password_hash)).toBe(true);
+      expect(persistedUser.passwordHash).toBeDefined();
+      expect(persistedUser.passwordHash).not.toBe('StrongPassword123!');
+      expect(await bcrypt.compare('StrongPassword123!', persistedUser.passwordHash)).toBe(true);
     });
 
     it('debe responder 201 cuando el registro sea exitoso', async () => {
@@ -191,13 +191,13 @@ describe('Identity routes integration', () => {
       expect(response.status).toBe(201);
     });
 
-    it('no debe retornar password_hash en la respuesta', async () => {
+    it('no debe retornar passwordHash en la respuesta', async () => {
       const response = await request(app)
         .post('/auth/register')
         .send(buildRegisterPayload());
 
       expect(response.status).toBe(201);
-      expect(response.body.user.password_hash).toBeUndefined();
+      expect(response.body.user.passwordHash).toBeUndefined();
     });
   });
 
@@ -239,8 +239,8 @@ describe('Identity routes integration', () => {
       await createUser({
         email: 'inactive@example.com',
         username: 'inactive_user',
-        cui_hash: 'cui-hash-005',
-        recovery_key_hash: 'recovery-hash-005',
+        cuiHash: 'cui-hash-005',
+        recoveryKeyHash: 'recovery-hash-005',
         statusName: 'INACTIVE',
         password: 'StrongPassword123!',
       });
@@ -253,7 +253,7 @@ describe('Identity routes integration', () => {
       expect(response.body.error).toBe('User is inactive or blocked');
     });
 
-    it('no debe retornar password_hash', async () => {
+    it('no debe retornar passwordHash', async () => {
       await request(app).post('/auth/register').send(buildRegisterPayload());
 
       const response = await request(app)
@@ -261,24 +261,24 @@ describe('Identity routes integration', () => {
         .send({ email: 'patient@example.com', password: 'StrongPassword123!' });
 
       expect(response.status).toBe(200);
-      expect(response.body.user.password_hash).toBeUndefined();
+      expect(response.body.user.passwordHash).toBeUndefined();
     });
   });
 
   describe('GET /auth/users/:id/public-key', () => {
-    it('debe retornar la public_key de un profesional existente', async () => {
+    it('debe retornar la publicKey de un profesional existente', async () => {
       const user = await createUser({
         roleName: 'DOCTOR',
-        pseudo_id: null,
-        professional_id: 'COL-67890',
-        public_key: 'doctor-public-key',
+        pseudoId: null,
+        professionalId: 'COL-67890',
+        publicKey: 'doctor-public-key',
       });
 
       const response = await request(app).get(`/auth/users/${user.id}/public-key`);
 
       expect(response.status).toBe(200);
       expect(response.body.user.id).toBe(user.id);
-      expect(response.body.user.public_key).toBe('doctor-public-key');
+      expect(response.body.user.publicKey).toBe('doctor-public-key');
       expect(response.body.user.role).toBe('DOCTOR');
     });
 
@@ -289,12 +289,12 @@ describe('Identity routes integration', () => {
       expect(response.body.error).toBe('User not found');
     });
 
-    it('debe retornar 404 si el usuario existe pero no tiene public_key', async () => {
+    it('debe retornar 404 si el usuario existe pero no tiene publicKey', async () => {
       const user = await createUser({
         roleName: 'DOCTOR',
-        pseudo_id: null,
-        professional_id: 'COL-22222',
-        public_key: '',
+        pseudoId: null,
+        professionalId: 'COL-22222',
+        publicKey: '',
       });
 
       const response = await request(app).get(`/auth/users/${user.id}/public-key`);
@@ -305,19 +305,19 @@ describe('Identity routes integration', () => {
   });
 
   describe('GET /auth/patients/:pseudoId/public-key', () => {
-    it('debe retornar la public_key de un paciente existente', async () => {
+    it('debe retornar la publicKey de un paciente existente', async () => {
       const user = await createUser({
         roleName: 'PATIENT',
-        pseudo_id: '11111111-1111-4111-8111-111111111111',
-        professional_id: null,
-        public_key: 'patient-public-key-2',
+        pseudoId: '11111111-1111-4111-8111-111111111111',
+        professionalId: null,
+        publicKey: 'patient-public-key-2',
       });
 
-      const response = await request(app).get(`/auth/patients/${user.pseudo_id}/public-key`);
+      const response = await request(app).get(`/auth/patients/${user.pseudoId}/public-key`);
 
       expect(response.status).toBe(200);
-      expect(response.body.user.pseudo_id).toBe(user.pseudo_id);
-      expect(response.body.user.public_key).toBe('patient-public-key-2');
+      expect(response.body.user.pseudoId).toBe(user.pseudoId);
+      expect(response.body.user.publicKey).toBe('patient-public-key-2');
       expect(response.body.user.role).toBe('PATIENT');
     });
 
@@ -328,15 +328,15 @@ describe('Identity routes integration', () => {
       expect(response.body.error).toBe('User not found');
     });
 
-    it('debe retornar 404 si el paciente existe pero no tiene public_key', async () => {
+    it('debe retornar 404 si el paciente existe pero no tiene publicKey', async () => {
       const user = await createUser({
         roleName: 'PATIENT',
-        pseudo_id: '33333333-3333-4333-8333-333333333333',
-        professional_id: null,
-        public_key: '',
+        pseudoId: '33333333-3333-4333-8333-333333333333',
+        professionalId: null,
+        publicKey: '',
       });
 
-      const response = await request(app).get(`/auth/patients/${user.pseudo_id}/public-key`);
+      const response = await request(app).get(`/auth/patients/${user.pseudoId}/public-key`);
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Public key not found for this user');
