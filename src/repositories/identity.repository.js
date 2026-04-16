@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { User, Role, Status } = require('../models/persistence/user.schema');
+const { serializeCanonicalPayload } = require('../utils/signatureCanonicalization');
 
 /**
  * Repository class for identity-related persistence operations.
@@ -104,8 +105,8 @@ class IdentityRepository {
   }
 
   /**
-   * Verify a detached signature against a JSON payload using the provided
-   * public key.
+   * Verify a detached signature against the canonical representation of a
+   * structured payload using the provided public key.
    *
    * @param {Object} input - Signature verification input.
    * @param {string} input.publicKey - PEM encoded public key.
@@ -119,7 +120,7 @@ class IdentityRepository {
     }
 
     const verifier = crypto.createVerify('SHA256');
-    verifier.update(JSON.stringify(payload));
+    verifier.update(serializeCanonicalPayload(payload), 'utf8');
     verifier.end();
 
     return verifier.verify(publicKey, signature, 'base64');

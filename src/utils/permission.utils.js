@@ -1,4 +1,8 @@
 const { createAppError } = require('./app-error');
+const {
+  normalizePermissionValidityPeriod,
+  normalizePermissionSignatureCollections,
+} = require('./signaturePayload.utils');
 
 /**
  * Validate permission validity period semantics.
@@ -8,16 +12,15 @@ const { createAppError } = require('./app-error');
  * @throws {Error} When the dates are invalid or out of order.
  */
 function validatePermissionDates(validFrom, validTo) {
-  const from = new Date(validFrom);
-  const to = new Date(validTo);
-
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
-    throw createAppError('Invalid permission dates', 400);
-  }
+  const normalizedPeriod = normalizePermissionValidityPeriod({ validFrom, validTo });
+  const from = new Date(normalizedPeriod.validFrom);
+  const to = new Date(normalizedPeriod.validTo);
 
   if (from >= to) {
     throw createAppError('validFrom must be earlier than validTo', 400);
   }
+
+  return normalizedPeriod;
 }
 
 /**
@@ -30,9 +33,17 @@ function validatePermissionDates(validFrom, validTo) {
 function validateActionsAndScopes(actions, scopes) {
   const allowedActions = ['read', 'write'];
   const allowedScopes = ['summary', 'labs', 'prescriptions', 'encounters'];
+  const normalizedCollections = normalizePermissionSignatureCollections({
+    allowedActions: actions,
+    allowedScopes: scopes,
+  });
 
-  const invalidActions = actions.filter((action) => !allowedActions.includes(action));
-  const invalidScopes = scopes.filter((scope) => !allowedScopes.includes(scope));
+  const invalidActions = normalizedCollections.allowedActions.filter(
+    (action) => !allowedActions.includes(action)
+  );
+  const invalidScopes = normalizedCollections.allowedScopes.filter(
+    (scope) => !allowedScopes.includes(scope)
+  );
 
   if (invalidActions.length > 0) {
     throw createAppError(`Invalid actions: ${invalidActions.join(', ')}`, 400);
@@ -41,6 +52,8 @@ function validateActionsAndScopes(actions, scopes) {
   if (invalidScopes.length > 0) {
     throw createAppError(`Invalid scopes: ${invalidScopes.join(', ')}`, 400);
   }
+
+  return normalizedCollections;
 }
 
 module.exports = {
