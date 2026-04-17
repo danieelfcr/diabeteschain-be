@@ -1,6 +1,10 @@
 const IdentityService = require('../services/identity/identity.service');
 const securityConfig = require('../config/security');
 const { signAccessToken } = require('../utils/jwt');
+const RegisterUserDTO = require('../models/api/user/register-user.dto');
+const LoginUserDTO = require('../models/api/user/login-user.dto');
+const GetUserPublicKeyDTO = require('../models/api/user/get-user-public-key.dto');
+const GetPatientPublicKeyDTO = require('../models/api/user/get-patient-public-key.dto');
 
 /**
  * Controller that exposes identity-related HTTP endpoints.
@@ -18,27 +22,12 @@ class IdentityController {
    * @param {import('express').Response} res - The express response object.
    * @returns {Promise<void>} Sends a JSON response.
    */
-  async register(req, res) {
+  async register(req, res, next) {
     try {
-      const userData = req.body;
+      const payload = req.validatedBody || RegisterUserDTO.from(req.body);
+      const user = await this.identityService.registerUser(payload);
 
-      // Validate presence of required registration fields.
-      const requiredFields = [
-        'username', 'email', 'password', 'cuiHash', 'firstName', 'middleName',
-        'firstLastName', 'secondLastName', 'role', 'publicKey',
-        'encryptedPrivateKeyByPassword', 'passwordKdfSalt',
-        'encryptedPrivateKeyByRecovery', 'recoveryKdfSalt', 'recoveryKeyHash'
-      ];
-
-      for (const field of requiredFields) {
-        if (!userData[field]) {
-          return res.status(400).json({ error: `Missing required field: ${field}` });
-        }
-      }
-
-      const user = await this.identityService.registerUser(userData);
-
-      res.status(201).json({
+      return res.status(201).json({
         message: 'User registered successfully',
         user: {
           id: user.id,
@@ -53,24 +42,28 @@ class IdentityController {
         }
       });
     } catch (error) {
-      console.log('Error type:', error.name, 'Message:', error.message);
-
-      // Handle domain-specific conflict conditions.
       if (error.message === 'Email already exists') {
-        return res.status(409).json({ error: error.message });
-      }
-      if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(409).json({ error: 'Unique constraint violation: ' + error.errors.map(e => e.path).join(', ') });
-      }
-      if (error.name === 'SequelizeValidationError') {
-        return res.status(400).json({ error: 'Validation error: ' + error.errors.map(e => e.message).join(', ') });
-      }
-      if (error.message.includes('Invalid role') || error.message.includes('professionalId is required')) {
-        return res.status(400).json({ error: error.message });
+        error.statusCode = 409;
       }
 
-      console.error('Error registering user:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        error.statusCode = 409;
+        error.message = 'Unique constraint violation: ' + error.errors.map(e => e.path).join(', ');
+      }
+
+      if (error.name === 'SequelizeValidationError') {
+        error.statusCode = 400;
+        error.message = 'Validation error: ' + error.errors.map(e => e.message).join(', ');
+      }
+
+      if (
+        error.message.includes('Invalid role')
+        || error.message.includes('professionalId is required')
+      ) {
+        error.statusCode = 400;
+      }
+
+      return next(error);
     }
   }
 
@@ -81,20 +74,10 @@ class IdentityController {
    * @param {import('express').Response} res - The express response object.
    * @returns {Promise<void>} Sends a JSON response.
    */
-  async login(req, res) {
+  async login(req, res, next) {
     try {
-      const { email, password } = req.body;
-
-      // Validate request payload fields.
-      if (!email) {
-        return res.status(400).json({ error: 'Missing required field: email' });
-      }
-
-      if (!password) {
-        return res.status(400).json({ error: 'Missing required field: password' });
-      }
-
-      const { user, tokenPayload } = await this.identityService.loginUser({ email, password });
+      const payload = req.validatedBody || LoginUserDTO.from(req.body);
+      const { user, tokenPayload } = await this.identityService.loginUser(payload);
       const accessToken = signAccessToken(tokenPayload);
 
       return res.status(200).json({
@@ -105,12 +88,7 @@ class IdentityController {
         user,
       });
     } catch (error) {
-      if (error.statusCode) {
-        return res.status(error.statusCode).json({ error: error.message });
-      }
-
-      console.error('Error logging in user:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      return next(error);
     }
   }
 
@@ -121,22 +99,17 @@ class IdentityController {
    * @param {import('express').Response} res - The express response object.
    * @returns {Promise<void>} Sends a JSON response.
    */
-  async getUserPublicKey(req, res) {
+  async getUserPublicKey(req, res, next) {
     try {
-      const { id } = req.params;
-      const user = await this.identityService.getProfessionalPublicKeyById(id);
+      const payload = GetUserPublicKeyDTO.from(req.params);
+      const user = await this.identityService.getProfessionalPublicKeyById(payload.id);
 
       return res.status(200).json({
         message: 'Public key retrieved successfully',
         user,
       });
     } catch (error) {
-      if (error.statusCode) {
-        return res.status(error.statusCode).json({ error: error.message });
-      }
-
-      console.error('Error retrieving professional public key:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      return next(error);
     }
   }
 
@@ -147,22 +120,17 @@ class IdentityController {
    * @param {import('express').Response} res - The express response object.
    * @returns {Promise<void>} Sends a JSON response.
    */
-  async getPatientPublicKey(req, res) {
+  async getPatientPublicKey(req, res, next) {
     try {
-      const { pseudoId } = req.params;
-      const user = await this.identityService.getPatientPublicKeyByPseudoId(pseudoId);
+      const payload = GetPatientPublicKeyDTO.from(req.params);
+      const user = await this.identityService.getPatientPublicKeyByPseudoId(payload.pseudoId);
 
       return res.status(200).json({
         message: 'Public key retrieved successfully',
         user,
       });
     } catch (error) {
-      if (error.statusCode) {
-        return res.status(error.statusCode).json({ error: error.message });
-      }
-
-      console.error('Error retrieving patient public key:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      return next(error);
     }
   }
 }
