@@ -1,5 +1,6 @@
 const express = require('express');
 const healthRoutes = require('./routes/health');
+const auditRoutes = require('./routes/audit.routes');
 const clinicalRecordRoutes = require('./routes/clinicalRecord.routes');
 const identityRoutes = require('./routes/identity.routes');
 const permissionRoutes = require('./routes/permission.routes');
@@ -19,6 +20,7 @@ const app = express();
 // Parse JSON payloads before requests reach the domain routes.
 app.use(express.json());
 app.use('/health', healthRoutes);
+app.use('/audit', auditRoutes);
 app.use('/clinical-records', clinicalRecordRoutes);
 app.use('/permissions', permissionRoutes);
 app.use('/auth', identityRoutes);
