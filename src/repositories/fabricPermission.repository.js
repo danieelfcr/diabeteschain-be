@@ -47,7 +47,7 @@ class FabricPermissionRepository {
    * @returns {Promise<Object>} Placeholder repository response.
    */
   async grantAccess(data) {
-    return this.submitTransaction('CreatePermission', data);
+    return this.submitTransaction('CreatePermissionWithAudit', data);
   }
 
   /**
@@ -57,7 +57,7 @@ class FabricPermissionRepository {
    * @returns {Promise<Object>} Placeholder repository response.
    */
   async revokeAccess(data) {
-    return this.submitTransaction('RevokePermission', data);
+    return this.submitTransaction('RevokePermissionWithAudit', data);
   }
 
   /**
