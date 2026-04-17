@@ -1,4 +1,10 @@
 const { getContract } = require('../config/fabric_gateway');
+const {
+  parseFabricResult,
+  normalizeActivePermission,
+  normalizeActivePermissions,
+  normalizeScopeMaterials,
+} = require('../utils/fabricPermission.utils');
 
 /**
  * Repository that encapsulates all ledger interactions related to patient
@@ -9,133 +15,29 @@ const { getContract } = require('../config/fabric_gateway');
  */
 class FabricPermissionRepository {
   /**
-   * Normalize active permission query responses from the ledger.
+   * Evaluate a transaction against the configured chaincode contract.
    *
-   * @param {Object|Array|string|null} result - Parsed ledger payload.
-   * @returns {Object|string|null} Active permission payload.
+   * @param {string} functionName - Chaincode transaction name.
+   * @param {Object|Array} payload - Serialized payload sent to chaincode.
+   * @returns {Promise<Object|Array|string|null>} Parsed transaction result.
    */
-  normalizeActivePermission(result) {
-    if (!result) {
-      return null;
-    }
-
-    if (Array.isArray(result)) {
-      return result[0] || null;
-    }
-
-    if (typeof result === 'string') {
-      if (/not found|does not exist|no active/i.test(result)) {
-        return null;
-      }
-
-      return result;
-    }
-
-    if (result.permission) {
-      return result.permission;
-    }
-
-    if (result.data) {
-      return result.data;
-    }
-
-    if (result.result) {
-      return result.result;
-    }
-
-    return result;
+  async evaluateTransaction(functionName, payload) {
+    const contract = await this.getContractReference();
+    const resultBytes = await contract.evaluateTransaction(functionName, JSON.stringify(payload));
+    return parseFabricResult(resultBytes);
   }
 
   /**
-   * Normalize active permission query responses into an array.
+   * Submit a transaction against the configured chaincode contract.
    *
-   * @param {Object|Array|string|null} result - Parsed ledger payload.
-   * @returns {Array<Object>} Active permission list.
+   * @param {string} functionName - Chaincode transaction name.
+   * @param {Object|Array} payload - Serialized payload sent to chaincode.
+   * @returns {Promise<Object|Array|string|null>} Parsed transaction result.
    */
-  normalizeActivePermissions(result) {
-    if (!result) {
-      return [];
-    }
-
-    if (Array.isArray(result)) {
-      return result.filter(Boolean);
-    }
-
-    if (typeof result === 'string') {
-      if (/not found|does not exist|no active/i.test(result)) {
-        return [];
-      }
-
-      return [];
-    }
-
-    if (Array.isArray(result.permissions)) {
-      return result.permissions.filter(Boolean);
-    }
-
-    if (Array.isArray(result.data)) {
-      return result.data.filter(Boolean);
-    }
-
-    if (Array.isArray(result.results)) {
-      return result.results.filter(Boolean);
-    }
-
-    return [result].filter(Boolean);
-  }
-
-  /**
-   * Normalize scope material query responses into an array.
-   *
-   * @param {Object|Array|string|null} result - Parsed ledger payload.
-   * @returns {Array<Object>} Scope material list.
-   */
-  normalizeScopeMaterials(result) {
-    if (!result) {
-      return [];
-    }
-
-    if (Array.isArray(result)) {
-      return result.filter(Boolean);
-    }
-
-    if (typeof result === 'string') {
-      return [];
-    }
-
-    if (Array.isArray(result.scopeMaterials)) {
-      return result.scopeMaterials.filter(Boolean);
-    }
-
-    if (Array.isArray(result.data)) {
-      return result.data.filter(Boolean);
-    }
-
-    if (Array.isArray(result.results)) {
-      return result.results.filter(Boolean);
-    }
-
-    return [result].filter(Boolean);
-  }
-
-  /**
-   * Parse Fabric Gateway responses into JSON when possible.
-   *
-   * @param {Uint8Array|Buffer|null|undefined} resultBytes - Raw result bytes.
-   * @returns {Object|string|null} Parsed result payload.
-   */
-  parseResult(resultBytes) {
-    if (!resultBytes?.length) {
-      return null;
-    }
-
-    const resultText = resultBytes.toString();
-
-    try {
-      return JSON.parse(resultText);
-    } catch (error) {
-      return resultText;
-    }
+  async submitTransaction(functionName, payload) {
+    const contract = await this.getContractReference();
+    const resultBytes = await contract.submitTransaction(functionName, JSON.stringify(payload));
+    return parseFabricResult(resultBytes);
   }
 
   /**
@@ -145,10 +47,7 @@ class FabricPermissionRepository {
    * @returns {Promise<Object>} Placeholder repository response.
    */
   async grantAccess(data) {
-    const contract = await this.getContractReference();
-    const resultBytes = await contract.submitTransaction('CreatePermission', JSON.stringify(data));
-
-    return this.parseResult(resultBytes);
+    return this.submitTransaction('CreatePermissionWithAudit', data);
   }
 
   /**
@@ -158,10 +57,7 @@ class FabricPermissionRepository {
    * @returns {Promise<Object>} Placeholder repository response.
    */
   async revokeAccess(data) {
-    const contract = await this.getContractReference();
-    const resultBytes = await contract.submitTransaction('RevokePermission', JSON.stringify(data));
-
-    return this.parseResult(resultBytes);
+    return this.submitTransaction('RevokePermissionWithAudit', data);
   }
 
   /**
@@ -171,10 +67,7 @@ class FabricPermissionRepository {
    * @returns {Promise<Object>} Placeholder repository response.
    */
   async getGrantById(permissionId) {
-    const contract = await this.getContractReference();
-    const resultBytes = await contract.submitTransaction('GetPermissionById', JSON.stringify({ permissionId }));
-
-    return this.parseResult(resultBytes);
+    return this.submitTransaction('GetPermissionById', { permissionId });
   }
 
   /**
@@ -185,13 +78,12 @@ class FabricPermissionRepository {
    * @returns {Promise<Object|string|null>} Active permission or null when absent.
    */
   async getActivePermissionByPatientAndGrantee(patientPseudoId, granteeId) {
-    const contract = await this.getContractReference();
-    const resultBytes = await contract.evaluateTransaction(
+    const result = await this.evaluateTransaction(
       'GetActivePermissionByPatientAndGrantee',
-      JSON.stringify({ patientPseudoId, granteeId })
+      { patientPseudoId, granteeId }
     );
 
-    return this.normalizeActivePermission(this.parseResult(resultBytes));
+    return normalizeActivePermission(result);
   }
 
   /**
@@ -202,13 +94,12 @@ class FabricPermissionRepository {
    * @returns {Promise<Array<Object>>} Active permission list.
    */
   async getActivePermissionsByPatientAndGrantee(patientPseudoId, granteeId) {
-    const contract = await this.getContractReference();
-    const resultBytes = await contract.evaluateTransaction(
+    const result = await this.evaluateTransaction(
       'GetActivePermissionByPatientAndGrantee',
-      JSON.stringify({ patientPseudoId, granteeId })
+      { patientPseudoId, granteeId }
     );
 
-    return this.normalizeActivePermissions(this.parseResult(resultBytes));
+    return normalizeActivePermissions(result);
   }
 
   /**
@@ -218,13 +109,8 @@ class FabricPermissionRepository {
    * @returns {Promise<Array<Object>>} Scope material entries for the permissions.
    */
   async getScopeMaterialsByPermissionIds(permissionIds = []) {
-    const contract = await this.getContractReference();
-    const resultBytes = await contract.evaluateTransaction(
-      'GetScopeMaterialsByPermissionIds',
-      JSON.stringify(permissionIds)
-    );
-
-    return this.normalizeScopeMaterials(this.parseResult(resultBytes));
+    const result = await this.evaluateTransaction('GetScopeMaterialsByPermissionIds', permissionIds);
+    return normalizeScopeMaterials(result);
   }
 
   /**
@@ -238,21 +124,6 @@ class FabricPermissionRepository {
     return getContract();
   }
 
-  /**
-   * Create a normalized placeholder response for repository scaffolding.
-   *
-   * @param {string} operation - Repository operation name.
-   * @param {Object} input - Input payload associated with the operation.
-   * @returns {Object} Placeholder repository response.
-   */
-  buildPendingResponse(operation, input) {
-    return {
-      repository: 'FabricPermissionRepository',
-      operation,
-      status: 'pending_implementation',
-      input,
-    };
-  }
 }
 
 module.exports = FabricPermissionRepository;
