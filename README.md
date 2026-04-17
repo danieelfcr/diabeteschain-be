@@ -1,14 +1,14 @@
 # DiabetesChain (Backend)
 
-Backend de **DiabetesChain**, prototipo desarrollado en el contexto de tesis para la gestion segura de expedientes clinicos de pacientes con diabetes mediante un enfoque de soberania del paciente sobre sus datos, control de acceso delegado, almacenamiento off-chain cifrado y trazabilidad on-chain.
+Backend de **DiabetesChain**, prototipo desarrollado en el contexto de tesis para la gestión segura de expedientes clínicos de pacientes con diabetes mediante un enfoque de soberanía del paciente sobre sus datos, control de acceso delegado, almacenamiento off-chain cifrado y trazabilidad on-chain.
 
 El proyecto integra:
 
 - **Express** como capa HTTP.
-- **Hyperledger Fabric** para permisos, auditoria e indices clinicos.
-- **MongoDB** para el repositorio de documentos clinicos cifrados.
+- **Hyperledger Fabric** para permisos, auditoría e índices clínicos.
+- **MongoDB** para el repositorio de documentos clínicos cifrados.
 - **SQLite + Sequelize** para identidad e infraestructura local.
-- **Proxy Re-Encryption** para material criptografico delegado.
+- **Proxy Re-Encryption** para material criptográfico delegado.
 
 **Autor:** Daniel Cabrera Reyes  
 **Universidad:** Universidad Rafael Landivar
@@ -19,8 +19,8 @@ El proyecto integra:
 
 1. [Consumo de Endpoints](#consumo-de-endpoints)
 2. [Estructura del Proyecto](#estructura-del-proyecto)
-3. [Flujos de Orquestacion](#flujos-de-orquestacion)
-4. [Ejecucion Local](#ejecucion-local)
+3. [Flujos de Orquestación](#flujos-de-orquestación)
+4. [Ejecución Local](#ejecución-local)
 
 ---
 
@@ -32,7 +32,7 @@ El proyecto integra:
 - Los endpoints protegidos requieren `Authorization: Bearer <accessToken>`
 - El token se obtiene en `POST /auth/login`
 - Los roles usados por el backend son: `PATIENT`, `DOCTOR`, `LABORATORY`, `PHARMACIST`
-- Las llaves publicas se exponen para permitir firma digital, cifrado y bootstrap criptografico del cliente
+- Las llaves públicas se exponen para permitir firma digital, cifrado y bootstrap criptográfico del cliente
 
 ### Encabezados Comunes
 
@@ -43,7 +43,7 @@ Authorization: Bearer <accessToken>
 
 ### Bloques de Payload Reutilizables
 
-#### Bloque de documento clinico cifrado
+#### Bloque de documento clínico cifrado
 
 ```json
 {
@@ -83,18 +83,18 @@ Authorization: Bearer <accessToken>
 
 ### Endpoints Disponibles
 
-| Metodo | Endpoint | Protegido | Rol requerido | Que incluir |
+| Método | Endpoint | Protegido | Rol requerido | Qué incluir |
 | --- | --- | --- | --- | --- |
 | `GET` | `/` | No | - | Sin payload |
 | `GET` | `/health` | No | - | Sin payload |
-| `POST` | `/auth/register` | No | - | Datos de usuario, credenciales y material criptografico |
+| `POST` | `/auth/register` | No | - | Datos de usuario, credenciales y material criptográfico |
 | `POST` | `/auth/login` | No | - | `email`, `password` |
-| `GET` | `/auth/users/:id/public-key` | No | - | Parametro `id` del profesional |
-| `GET` | `/auth/patients/:pseudoId/public-key` | No | - | Parametro `pseudoId` del paciente |
+| `GET` | `/auth/users/:id/public-key` | No | - | Parámetro `id` del profesional |
+| `GET` | `/auth/patients/:pseudoId/public-key` | No | - | Parámetro `pseudoId` del paciente |
 | `POST` | `/permissions/grants` | Si | `PATIENT` | Grant firmado, ventanas de validez, scopes, acciones, `kfrags` |
 | `POST` | `/permissions/revocations` | Si | `PATIENT` | `professionalId`, `signature` |
 | `GET` | `/clinical-records/history/me` | Si | `PATIENT` | Sin payload |
-| `GET` | `/clinical-records/history/:patientPseudoId` | Si | `DOCTOR`, `LABORATORY`, `PHARMACIST` | Parametro `patientPseudoId` |
+| `GET` | `/clinical-records/history/:patientPseudoId` | Si | `DOCTOR`, `LABORATORY`, `PHARMACIST` | Parámetro `patientPseudoId` |
 | `POST` | `/clinical-records/events/doctor` | Si | `DOCTOR` | `patientPseudoId`, `signature`, `encounter`, opcional `labOrder`, opcional `prescription` |
 | `POST` | `/clinical-records/events/laboratory` | Si | `LABORATORY` | `patientPseudoId`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
 | `POST` | `/clinical-records/events/pharmacy` | Si | `PHARMACIST` | `patientPseudoId`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
@@ -103,7 +103,7 @@ Authorization: Bearer <accessToken>
 <details>
 <summary><strong>POST /auth/register</strong></summary>
 
-**Descripcion:** registra un usuario en el dominio de identidad.
+**Descripción:** registra un usuario en el dominio de identidad.
 
 **Payload requerido**
 
@@ -159,22 +159,22 @@ Authorization: Bearer <accessToken>
 <details>
 <summary><strong>GET /auth/users/:id/public-key</strong></summary>
 
-**Uso:** obtener la llave publica de un profesional.
+**Uso:** obtener la llave pública de un profesional.
 
 **Incluir**
 
-- Parametro de ruta `id`
+- Parámetro de ruta `id`
 
 </details>
 
 <details>
 <summary><strong>GET /auth/patients/:pseudoId/public-key</strong></summary>
 
-**Uso:** obtener la llave publica de un paciente.
+**Uso:** obtener la llave pública de un paciente.
 
 **Incluir**
 
-- Parametro de ruta `pseudoId`
+- Parámetro de ruta `pseudoId`
 
 </details>
 
@@ -233,7 +233,7 @@ Authorization: Bearer <accessToken>
 
 **Incluir**
 
-- Parametro de ruta `patientPseudoId`
+- Parámetro de ruta `patientPseudoId`
 - Token JWT de un `DOCTOR`, `LABORATORY` o `PHARMACIST`
 
 </details>
@@ -241,7 +241,7 @@ Authorization: Bearer <accessToken>
 <details>
 <summary><strong>POST /clinical-records/events/doctor</strong></summary>
 
-**Uso:** registrar una consulta medica y, opcionalmente, orden de laboratorio y receta.
+**Uso:** registrar una consulta médica y, opcionalmente, orden de laboratorio y receta.
 
 **Payload requerido**
 
@@ -371,7 +371,7 @@ Authorization: Bearer <accessToken>
 <details>
 <summary><strong>GET /audit/me</strong></summary>
 
-**Uso:** recuperar la linea de auditoria del paciente autenticado.
+**Uso:** recuperar la línea de auditoría del paciente autenticado.
 
 **Incluir**
 
@@ -383,7 +383,7 @@ Authorization: Bearer <accessToken>
 
 ## Estructura del Proyecto
 
-La estructura sigue un enfoque por capas: rutas y controladores para HTTP, servicios de orquestacion para los casos de uso, repositorios para acceso a persistencia y Fabric, y utilidades para validacion, firma y normalizacion.
+La estructura sigue un enfoque por capas: rutas y controladores para HTTP, servicios de orquestación para los casos de uso, repositorios para acceso a persistencia y Fabric, y utilidades para validación, firma y normalización.
 
 ```text
 diabeteschain-be/
@@ -419,35 +419,35 @@ diabeteschain-be/
 <details>
 <summary><strong>src/</strong></summary>
 
-| Carpeta / archivo | Funcion principal |
+| Carpeta / archivo | Función principal |
 | --- | --- |
 | `app.js` | Registra middleware, rutas y manejo global de errores |
-| `server.js` | Arranque del servidor e inicializacion de MongoDB, SQLite y Fabric |
+| `server.js` | Arranque del servidor e inicialización de MongoDB, SQLite y Fabric |
 | `clients/proxyReencryption/` | Cliente HTTP o adaptador hacia nodos de proxy re-encryption |
 | `config/` | Conexiones y bootstrap de MongoDB, SQLite, seguridad y Fabric Gateway |
-| `constants/` | Constantes del dominio, especialmente de auditoria |
-| `controllers/` | Traduccion de requests HTTP hacia servicios |
-| `mappers/` | Normalizacion de respuestas del dominio clinico |
-| `middlewares/` | Autenticacion JWT, autorizacion por rol, validacion DTO y errores |
-| `models/api/` | DTOs de entrada para usuarios, permisos e historia clinica |
+| `constants/` | Constantes del dominio, especialmente de auditoría |
+| `controllers/` | Traducción de requests HTTP hacia servicios |
+| `mappers/` | Normalización de respuestas del dominio clínico |
+| `middlewares/` | Autenticación JWT, autorización por rol, validación DTO y errores |
+| `models/api/` | DTOs de entrada para usuarios, permisos e historia clínica |
 | `models/persistence/` | Esquemas de MongoDB y modelos Sequelize |
-| `repositories/` | Acceso a MongoDB, SQLite/Fabric y encapsulacion de consultas |
-| `routes/` | Definicion de endpoints por modulo |
-| `services/identity/` | Logica de registro, login y llaves publicas |
+| `repositories/` | Acceso a MongoDB, SQLite/Fabric y encapsulación de consultas |
+| `routes/` | Definición de endpoints por módulo |
+| `services/identity/` | Lógica de registro, login y llaves públicas |
 | `services/orchestration/` | Casos de uso complejos que coordinan varios repositorios |
-| `utils/` | Firmas, JWT, permisos, normalizacion y manejo de errores |
+| `utils/` | Firmas, JWT, permisos, normalización y manejo de errores |
 
 </details>
 
 <details>
 <summary><strong>src/routes/</strong></summary>
 
-- `identity.routes.js`: autenticacion, registro y consulta de llaves publicas
-- `permission.routes.js`: otorgamiento y revocacion de accesos
-- `clinicalRecord.routes.js`: historial clinico y registro de eventos
-- `audit.routes.js`: auditoria visible para el paciente
+- `identity.routes.js`: autenticación, registro y consulta de llaves públicas
+- `permission.routes.js`: otorgamiento y revocación de accesos
+- `clinicalRecord.routes.js`: historial clínico y registro de eventos
+- `audit.routes.js`: auditoría visible para el paciente
 - `health.js`: healthcheck del servicio
-- `infrastructure.routes.js` y `scope.routes.js`: modulos reservados o en evolucion
+- `infrastructure.routes.js` y `scope.routes.js`: módulos reservados o en evolución
 
 </details>
 
@@ -455,18 +455,18 @@ diabeteschain-be/
 <summary><strong>src/services/orchestration/</strong></summary>
 
 - `permission.orchestration.service.js`: coordina grants y revocations con identidad, Fabric y proxy re-encryption
-- `clinicalRecord.orchestration.service.js`: coordina lectura de historia, validacion de permisos y registro de eventos clinicos
-- `audit.orchestration.service.js`: coordina la consulta de auditoria del paciente
+- `clinicalRecord.orchestration.service.js`: coordina lectura de historia, validación de permisos y registro de eventos clínicos
+- `audit.orchestration.service.js`: coordina la consulta de auditoría del paciente
 
 </details>
 
 <details>
 <summary><strong>src/repositories/</strong></summary>
 
-- `identity.repository.js`: usuarios, busquedas por email, `id`, `pseudoId` y verificacion de firma
-- `clinicalRecord.repository.js`: documentos clinicos cifrados en MongoDB
+- `identity.repository.js`: usuarios, búsquedas por email, `id`, `pseudoId` y verificación de firma
+- `clinicalRecord.repository.js`: documentos clínicos cifrados en MongoDB
 - `fabricPermission.repository.js`: permisos activos, revocaciones y materiales de alcance en Fabric
-- `fabricClinicalRecord.repository.js`: indices clinicos y eventos de auditoria en Fabric
+- `fabricClinicalRecord.repository.js`: índices clínicos y eventos de auditoría en Fabric
 
 </details>
 
@@ -475,15 +475,15 @@ diabeteschain-be/
 
 - `integration/`: pruebas de rutas y flujos HTTP
 - `unit/`: pruebas de utilidades, firmas y repositorios aislados
-- `setup/`: inicializacion comun para pruebas
+- `setup/`: inicialización común para pruebas
 
 </details>
 
 ---
 
-## Flujos de Orquestacion
+## Flujos de Orquestación
 
-Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es mostrar la secuencia de llamadas y validaciones sin bajar a detalle de implementacion.
+Esta sección resume los pasos que sigue cada caso de uso principal. La idea es mostrar la secuencia de llamadas y validaciones sin bajar a detalle de implementación.
 
 ### PermissionOrchestrationService
 
@@ -495,12 +495,12 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 4. Recupera al profesional destino por `professionalId`.
 5. Valida que el destinatario sea `DOCTOR`, `LABORATORY` o `PHARMACIST`.
 6. Valida fechas de vigencia, scopes y acciones permitidas.
-7. Construye el payload canonico de firma del grant.
-8. Verifica la firma con la llave publica del paciente.
+7. Construye el payload canónico de firma del grant.
+8. Verifica la firma con la llave pública del paciente.
 9. Solicita nodos de proxy re-encryption segun la cantidad de `kfrags`.
 10. Distribuye los `kfrags` a los nodos seleccionados con estado inicial `PENDING`.
 11. Registra el permiso en Hyperledger Fabric.
-12. Actualiza la distribucion de `kfrags` a estado `ACTIVE`.
+12. Actualiza la distribución de `kfrags` a estado `ACTIVE`.
 13. Devuelve el resultado del grant con la referencia del permiso creado.
 
 #### `revokeAccess(payload, actor)`
@@ -508,9 +508,9 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 1. Verifica autenticacion y rol `PATIENT`.
 2. Obtiene el `pseudoId` del paciente autenticado.
 3. Resuelve paciente y profesional desde el repositorio de identidad.
-4. Verifica que el profesional tenga un rol clinico valido.
-5. Construye el payload canonico de firma de revocacion.
-6. Verifica la firma con la llave publica del paciente.
+4. Verifica que el profesional tenga un rol clínico válido.
+5. Construye el payload canónico de firma de revocación.
+6. Verifica la firma con la llave pública del paciente.
 7. Consulta en Fabric si existe un permiso activo entre paciente y profesional.
 8. Revoca el permiso en Hyperledger Fabric.
 9. Revoca o invalida la transformacion delegada en el servicio de proxy re-encryption.
@@ -523,14 +523,14 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 1. Verifica autenticacion y rol `PATIENT`.
 2. Obtiene el `pseudoId` desde el actor autenticado.
 3. Confirma que el paciente exista en el dominio de identidad.
-4. Recupera los indices clinicos del paciente desde Fabric.
-5. Recupera los documentos clinicos cifrados desde MongoDB.
+4. Recupera los índices clínicos del paciente desde Fabric.
+5. Recupera los documentos clínicos cifrados desde MongoDB.
 6. Relaciona referencias on-chain con documentos off-chain.
 7. Devuelve el historial del paciente ya mapeado.
 
 #### `getProfessionalHistory(payload, actor)`
 
-1. Verifica autenticacion y que el actor sea un profesional de salud valido.
+1. Verifica autenticación y que el actor sea un profesional de salud válido.
 2. Toma el `id` del profesional autenticado y el `patientPseudoId` solicitado.
 3. Resuelve paciente y profesional desde identidad.
 4. Consulta en Fabric los permisos activos entre paciente y profesional.
@@ -538,18 +538,18 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 6. Calcula los scopes efectivos autorizados.
 7. Recupera en Fabric el material delegado asociado a esos permisos.
 8. Filtra el material delegado segun scopes autorizados.
-9. Recupera desde Fabric las referencias clinicas del paciente.
+9. Recupera desde Fabric las referencias clínicas del paciente.
 10. Filtra las referencias para conservar solo las permitidas por scope.
 11. Recupera desde MongoDB los documentos clinicos correspondientes.
 12. Mapea los registros con sus referencias de blockchain.
 13. Solicita al cliente de proxy re-encryption el material de acceso delegado para el frontend.
-14. Devuelve registros, permisos efectivos y material criptografico delegado.
+14. Devuelve registros, permisos efectivos y material criptográfico delegado.
 
 #### `registerDoctorConsultation(payload, actor)`
 
-1. Construye el payload canonico de firma para toda la consulta.
+1. Construye el payload canónico de firma para toda la consulta.
 2. Reune los scopes solicitados desde `encounter`, `labOrder` y `prescription`.
-3. Resuelve el contexto compartido de registro clinico.
+3. Resuelve el contexto compartido de registro clínico.
 4. Registra el `encounter` como evento raiz.
 5. Si existe `labOrder`, lo registra como evento hijo del encounter.
 6. Si existe `prescription`, la registra como evento hijo del encounter.
@@ -557,8 +557,8 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 
 #### `registerLaboratoryResult(payload, actor)`
 
-1. Construye el payload canonico de firma del resultado de laboratorio.
-2. Resuelve el contexto compartido de registro clinico para rol `LABORATORY`.
+1. Construye el payload canónico de firma del resultado de laboratorio.
+2. Resuelve el contexto compartido de registro clínico para rol `LABORATORY`.
 3. Busca el registro base indicado en `basedOn`.
 4. Verifica que el registro base pertenezca al paciente y sea de tipo `LAB_ORDER`.
 5. Recupera la referencia de blockchain asociada a la orden base.
@@ -567,8 +567,8 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 
 #### `registerPharmacyDispatch(payload, actor)`
 
-1. Construye el payload canonico de firma del despacho.
-2. Resuelve el contexto compartido de registro clinico para rol `PHARMACIST`.
+1. Construye el payload canónico de firma del despacho.
+2. Resuelve el contexto compartido de registro clínico para rol `PHARMACIST`.
 3. Busca el registro base indicado en `basedOn`.
 4. Verifica que el registro base pertenezca al paciente y sea `MEDICAL_PRESCRIPTION`.
 5. Recupera la referencia de blockchain asociada a la receta base.
@@ -577,15 +577,15 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 
 #### `resolveClinicalRegistrationContext(...)`
 
-1. Verifica autenticacion del actor.
+1. Verifica autenticación del actor.
 2. Valida que el rol autenticado coincida con el rol requerido por el caso de uso.
 3. Valida presencia de `patientPseudoId` y `signature`.
 4. Resuelve paciente y profesional desde identidad.
-5. Verifica la firma del request con la llave publica del profesional.
+5. Verifica la firma del request con la llave pública del profesional.
 6. Consulta en Fabric el permiso activo entre paciente y profesional.
 7. Verifica que el permiso permita accion `write`.
-8. Valida que los scopes solicitados esten autorizados.
-9. Devuelve el contexto comun para registrar eventos.
+8. Valida que los scopes solicitados estén autorizados.
+9. Devuelve el contexto común para registrar eventos.
 
 #### `resolveBaseClinicalRecord(...)`
 
@@ -593,32 +593,32 @@ Esta seccion resume los pasos que sigue cada caso de uso principal. La idea es m
 2. Busca el registro base en MongoDB.
 3. Verifica que el registro pertenezca al paciente.
 4. Verifica que el tipo del registro coincida con el esperado.
-5. Busca el indice clinico correspondiente en Fabric.
+5. Busca el índice clínico correspondiente en Fabric.
 6. Verifica consistencia de tipo y estado en blockchain.
 7. Devuelve el registro base y su referencia on-chain.
 
 #### `registerClinicalRecordEvent(...)`
 
 1. Resuelve o reutiliza el contexto validado de registro.
-2. Verifica que exista el bloque de datos clinicos a persistir.
+2. Verifica que exista el bloque de datos clínicos a persistir.
 3. Valida el `scopeId` del evento contra el permiso activo.
 4. Genera `recordId` y, si aplica, `encounterId`.
-5. Construye el documento clinico cifrado para MongoDB.
+5. Construye el documento clínico cifrado para MongoDB.
 6. Persiste el documento off-chain.
-7. Construye el indice clinico para blockchain.
-8. Registra el indice en Hyperledger Fabric.
+7. Construye el índice clínico para blockchain.
+8. Registra el índice en Hyperledger Fabric.
 9. Si falla el registro on-chain, intenta rollback del documento off-chain.
-10. Retorna el documento y el indice resultante.
+10. Retorna el documento y el índice resultante.
 
 ### AuditOrchestrationService
 
 #### `getMyAuditEvents(actor)`
 
-1. Verifica autenticacion y rol `PATIENT`.
+1. Verifica autenticación y rol `PATIENT`.
 2. Obtiene el `pseudoId` del actor autenticado.
 3. Confirma que el paciente exista en identidad.
-4. Consulta en Fabric los eventos de auditoria del paciente.
-5. Devuelve la linea de auditoria normalizada.
+4. Consulta en Fabric los eventos de auditoría del paciente.
+5. Devuelve la línea de auditoría normalizada.
 
 ### IdentityService
 
@@ -630,15 +630,15 @@ Aunque no pertenece a `services/orchestration/`, forma parte del flujo funcional
 2. Si el usuario es paciente, genera `pseudoId`.
 3. Si no es paciente, exige `professionalId`.
 4. Verifica que el email no exista previamente.
-5. Hashea la contrasena.
-6. Resuelve el catalogo de rol y estado `ACTIVE`.
+5. Hashea la contraseña.
+6. Resuelve el catálogo de rol y estado `ACTIVE`.
 7. Construye el payload de persistencia.
 8. Crea el usuario en la base de identidad.
 
 #### `loginUser(credentials)`
 
 1. Busca el usuario por email.
-2. Compara la contrasena enviada con el hash almacenado.
+2. Compara la contraseña enviada con el hash almacenado.
 3. Verifica que el usuario este `ACTIVE`.
 4. Sanitiza el objeto de usuario.
 5. Construye el payload del JWT.
@@ -649,18 +649,18 @@ Aunque no pertenece a `services/orchestration/`, forma parte del flujo funcional
 1. Valida que el `id` tenga formato UUID.
 2. Busca el usuario por identificador interno.
 3. Verifica que no sea paciente.
-4. Devuelve la llave publica en formato de respuesta segura.
+4. Devuelve la llave pública en formato de respuesta segura.
 
 #### `getPatientPublicKeyByPseudoId(pseudoId)`
 
 1. Valida que el `pseudoId` tenga formato UUID.
 2. Busca el usuario por pseudoidentificador.
-3. Verifica que si sea paciente.
-4. Devuelve la llave publica del paciente.
+3. Verifica que sí sea paciente.
+4. Devuelve la llave pública del paciente.
 
 ---
 
-## Ejecucion Local
+## Ejecución Local
 
 ### Scripts
 
@@ -695,6 +695,6 @@ npm test
 
 ---
 
-## Resumen Arquitectonico
+## Resumen Arquitectónico
 
-DiabetesChain (Backend) implementa una separacion clara entre identidad, permisos, auditoria e historia clinica. La informacion sensible se conserva cifrada fuera de la cadena, mientras que Hyperledger Fabric centraliza permisos, indices y trazabilidad. El backend actua como capa de orquestacion entre clientes, repositorios clinicos y componentes criptograficos, manteniendo el control del acceso centrado en el paciente.
+DiabetesChain (Backend) implementa una separación clara entre identidad, permisos, auditoría e historia clínica. La información sensible se conserva cifrada fuera de la cadena, mientras que Hyperledger Fabric centraliza permisos, índices y trazabilidad. El backend actúa como capa de orquestación entre clientes, repositorios clínicos y componentes criptográficos, manteniendo el control del acceso centrado en el paciente.
