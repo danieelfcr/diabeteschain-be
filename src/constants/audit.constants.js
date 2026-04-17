@@ -1,0 +1,33 @@
+const AUDIT_ACTIONS = [
+  'GRANT_PERMISSION',
+  'REVOKE_PERMISSION',
+  'VERIFY_ACCESS',
+  'READ_CLINICAL_HISTORY',
+  'REGISTER_ENCOUNTER',
+  'REGISTER_LAB_ORDER',
+  'REGISTER_LAB_RESULT',
+  'REGISTER_PRESCRIPTION',
+  'REGISTER_DISPENSATION',
+];
+
+const AUDIT_OUTCOMES = ['SUCCESS', 'DENIED', 'FAILED'];
+
+const AUDIT_TARGET_TYPES = [
+  'permission',
+  'scope',
+  'encounter',
+  'labOrder',
+  'labResult',
+  'prescription',
+  'dispensation',
+  'clinicalRecord',
+];
+
+module.exports = {
+  AUDIT_ACTIONS,
+  AUDIT_ACTIONS_SET: new Set(AUDIT_ACTIONS),
+  AUDIT_OUTCOMES,
+  AUDIT_OUTCOMES_SET: new Set(AUDIT_OUTCOMES),
+  AUDIT_TARGET_TYPES,
+  AUDIT_TARGET_TYPES_SET: new Set(AUDIT_TARGET_TYPES),
+};

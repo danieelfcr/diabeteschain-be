@@ -350,7 +350,11 @@ class ClinicalRecordOrchestrationService {
     }
 
     // 2. Retrieve clinical references/indexes from the ledger for the patient
-    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexes(patientPseudoId);
+    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
+      patientPseudoId,
+      actorId: professional.id,
+      actorRole: professionalRole,
+    });
 
     // 3. Retrieve encrypted off-chain clinical records for the patient
     const records = references.length
