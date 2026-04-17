@@ -67,7 +67,7 @@ class FabricPermissionRepository {
    * @returns {Promise<Object>} Placeholder repository response.
    */
   async getGrantById(permissionId) {
-    return this.submitTransaction('GetPermissionById', { permissionId });
+    return this.evaluateTransaction('GetPermissionById', { permissionId });
   }
 
   /**
