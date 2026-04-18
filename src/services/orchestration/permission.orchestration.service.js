@@ -1,6 +1,6 @@
+const crypto = require('crypto');
 const IdentityRepository = require('../../repositories/identity.repository');
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
-const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
 const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
 const { validatePermissionDates, validateActionsAndScopes } = require('../../utils/permission.utils');
 const {
@@ -20,7 +20,6 @@ class PermissionOrchestrationService {
   constructor() {
     this.identityRepository = new IdentityRepository();
     this.fabricPermissionRepository = new FabricPermissionRepository();
-    this.proxyReencryptionClient = new ProxyReencryptionClient();
     this.scopeCatalogService = new ScopeCatalogService();
   }
 
@@ -41,6 +40,23 @@ class PermissionOrchestrationService {
 
     const resolvedRole = source?.role?.name || source?.role || source?.name || null;
     return typeof resolvedRole === 'string' ? resolvedRole.trim().toUpperCase() || null : null;
+  }
+
+  /**
+   * Build a deterministic placeholder proxy identifier list for the current
+   * branch.
+   *
+   * The deployed chaincode still requires non-empty proxy identifiers even
+   * when PRE orchestration is disabled. These placeholders keep the on-chain
+   * contract satisfied without invoking any external PRE flow.
+   *
+   * @param {number} count - Desired number of placeholder proxy ids.
+   * @returns {string[]} Deterministic proxy id list.
+   */
+  buildPlaceholderProxyIds(count = 3) {
+    const normalizedCount = Number.isInteger(count) && count > 0 ? count : 3;
+
+    return Array.from({ length: normalizedCount }, (_, index) => `pre-disabled-proxy-${index + 1}`);
   }
 
   /**
@@ -112,27 +128,18 @@ class PermissionOrchestrationService {
       throw createAppError('Invalid signature for permission grant', 400);
     }
 
-    // 3. Select randomly proxy re-encryption nodes according to kfrags length
-    const selectedProxies = await this.proxyReencryptionClient.selectNodes({
-      count: payload.kfrags.length
-    })
+    // 3. PRE is intentionally disabled in this branch so the flow remains
+    // focused on backend-to-blockchain validation only.
+    const placeholderProxyIds = this.buildPlaceholderProxyIds(
+      Array.isArray(payload.kfrags) ? payload.kfrags.length : 0
+    );
 
-    if (!selectedProxies || selectedProxies.length < payload.kfrags.length) {
-      throw createAppError('Failed to select sufficient proxy re-encryption nodes', 500);
-    }
+    const permissionId = crypto.randomUUID();
+    const auditId = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
 
-    // 4. Distribute kfrags to selected proxy re-encryption nodes
-    const kfragDistribution = await this.proxyReencryptionClient.distributeKFrags({
-      patientPseudoId: patientPseudoId,
-      granteeId: grantee.id,
-      allowedScopes,
-      kfrags: payload.kfrags,
-      proxies: selectedProxies,
-      status: 'PENDING'
-    });
-
-    // 5. Create permission record in FabricPermission Repository
     const permission = await this.fabricPermissionRepository.grantAccess({
+      permissionId,
       patientId: patientPseudoId,
       granteeId: grantee.id,
       granteeRole: granteeRole,
@@ -140,15 +147,14 @@ class PermissionOrchestrationService {
       allowedScopes,
       validFrom,
       validTo,
-      proxyIds: selectedProxies.map((p) => p.id),
+      // Keep the field shape expected by the deployed ledger contract, but
+      // without distributing any PRE material in this branch.
+      proxyIds: placeholderProxyIds,
       createdBy: actor.id,
       signature: payload.signature,
-    });
-
-    // 6. Modify kfrags distribution status to 'ACTIVE' after successful ledger transaction
-    await this.proxyReencryptionClient.updateKFragDistributionStatus({
-      kfragDistributionId: kfragDistribution.id,
-      status: 'ACTIVE',
+      auditId,
+      createdAt: timestamp,
+      timestamp,
     });
   
     return {
@@ -225,20 +231,16 @@ class PermissionOrchestrationService {
       throw createAppError('No active access grant found for this patient and professional', 404);
     }
 
-    // 4. Revoke the active permission in Fabric and invalidate proxy distribution.
+    // 4. Revoke the active permission in Fabric. PRE is disabled in this
+    // branch, so no proxy invalidation is executed here.
     const revocation = await this.fabricPermissionRepository.revokeAccess({
       permissionId: activePermission.id || activePermission.permissionId || null,
       patientId: patientPseudoId,
       granteeId: grantee.id,
       revokedBy: actor.id,
       signature: payload.signature,
-    });
-
-    const proxyRevocation = await this.proxyReencryptionClient.revokeAccessTransform({
-      patientPseudoId,
-      granteeId: grantee.id,
-      permissionId: activePermission.id || activePermission.permissionId || null,
-      status: 'REVOKED',
+      auditId: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
     });
 
     return {
@@ -250,7 +252,6 @@ class PermissionOrchestrationService {
         professionalId: grantee.id,
         revokedPermissionId: activePermission.id || activePermission.permissionId || null,
         permission: revocation,
-        proxyDistribution: proxyRevocation,
       },
     };
   }

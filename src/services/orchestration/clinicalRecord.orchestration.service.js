@@ -3,7 +3,6 @@ const ClinicalRecordRepository = require('../../repositories/clinicalRecord.repo
 const FabricClinicalRecordRepository = require('../../repositories/fabricClinicalRecord.repository');
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
 const IdentityRepository = require('../../repositories/identity.repository');
-const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
 const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
 const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
 const { createAppError } = require('../../utils/app-error');
@@ -11,10 +10,8 @@ const {
   getRecordIdentifier,
   normalizePermission,
   normalizePermissions,
-  normalizeScopeMaterials,
   isPermissionActive,
   getEffectiveScopes,
-  filterScopeMaterialsByScopes,
   filterReferencesByScopes,
   normalizeRecordType,
   getLedgerAuthorRole,
@@ -43,7 +40,6 @@ class ClinicalRecordOrchestrationService {
     this.fabricClinicalRecordRepository = new FabricClinicalRecordRepository();
     this.fabricPermissionRepository = new FabricPermissionRepository();
     this.identityRepository = new IdentityRepository();
-    this.proxyReencryptionClient = new ProxyReencryptionClient();
     this.scopeCatalogService = new ScopeCatalogService();
   }
 
@@ -465,14 +461,6 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('The active permissions do not allow delegated read access', 403);
     }
 
-    const permissionIds = readablePermissions
-      .map((permission) => permission.permissionId)
-      .filter(Boolean);
-
-    if (permissionIds.length === 0) {
-      throw createAppError('Active delegated permissions are missing permission identifiers', 500);
-    }
-
     const effectiveScopes = getEffectiveScopes(readablePermissions);
 
     if (effectiveScopes.length === 0) {
@@ -488,27 +476,18 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('The active permissions do not reference any active clinical scope', 403);
     }
 
-    // 4. Retrieve the delegated scope materials required for the authorized permissions
-    const scopeMaterials = await this.fabricPermissionRepository.getScopeMaterialsByPermissionIds(permissionIds);
-    const normalizedScopeMaterials = normalizeScopeMaterials(scopeMaterials);
-    const activeScopeMaterials = filterScopeMaterialsByScopes(normalizedScopeMaterials, catalogEffectiveScopes);
-
-    if (activeScopeMaterials.length === 0) {
-      throw createAppError('No active delegated scope material found for the granted permissions', 403);
-    }
-
-    const materialScopes = [...new Set(activeScopeMaterials.map((entry) => entry.scopeId))];
-
-    // 5. Retrieve ledger references and keep only the scopes authorized by the active permission
+    // 4. PRE is intentionally disabled in this branch, so delegated scope
+    // material is not required to retrieve records. The permission scopes are
+    // used directly for the backend-to-blockchain validation flow.
     const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
       patientPseudoId,
       professionalId: professional.id,
       professionalRole,
     });
 
-    const scopedReferences = filterReferencesByScopes(references, materialScopes);
+    const scopedReferences = filterReferencesByScopes(references, catalogEffectiveScopes);
 
-    // 6. Retrieve encrypted off-chain records linked to the authorized references
+    // 5. Retrieve encrypted off-chain records linked to the authorized references
     const records = scopedReferences.length
       ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(scopedReferences, patientPseudoId)
       : [];
@@ -522,18 +501,6 @@ class ClinicalRecordOrchestrationService {
     const mappedRecords = records.map((record) =>
       mapClinicalRecord(record, referenceMap.get(getRecordIdentifier(record)) || null)
     );
-
-    // 7. Resolve the delegated cryptographic material required by the frontend
-    const delegatedAccessMaterial = await this.proxyReencryptionClient.getDelegatedAccessMaterial({
-      patientPseudoId,
-      granteeId: professional.id,
-      granteeRole: professionalRole,
-      permissionIds,
-      effectiveScopes: materialScopes,
-      scopeMaterials: activeScopeMaterials,
-      references: scopedReferences,
-      records: mappedRecords,
-    });
 
     return {
       message: 'Professional history retrieved successfully',
@@ -564,12 +531,14 @@ class ClinicalRecordOrchestrationService {
         validFrom: permission.validFrom,
         validTo: permission.validTo,
       })),
-      effectiveScopes: materialScopes,
+      effectiveScopes: catalogEffectiveScopes,
       totalRecords: mappedRecords.length,
       records: mappedRecords,
       delegatedAccessMaterial: {
-        scopeMaterials: activeScopeMaterials,
-        ...delegatedAccessMaterial,
+        enabled: false,
+        retrievalMode: 'direct_backend_blockchain',
+        effectiveScopes: catalogEffectiveScopes,
+        scopeMaterials: [],
       },
     };
   }

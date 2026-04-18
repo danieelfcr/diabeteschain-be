@@ -19,7 +19,7 @@ class GrantAccessDTO {
     this.validFrom = payload.validFrom;
     this.validTo = payload.validTo;
     this.signature = payload.signature;
-    this.kfrags = payload.kfrags;
+    this.kfrags = Array.isArray(payload.kfrags) ? payload.kfrags : [];
   }
 
   /**
@@ -36,7 +36,6 @@ class GrantAccessDTO {
       'validFrom',
       'validTo',
       'signature',
-      'kfrags',
     ];
 
     for (const field of requiredFields) {

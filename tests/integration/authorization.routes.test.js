@@ -51,7 +51,6 @@ const buildGrantPayload = () => ({
   validFrom: '2026-01-01T00:00:00.000Z',
   validTo: '2026-12-31T23:59:59.000Z',
   signature: 'grant-signature',
-  kfrags: ['kfrag-001'],
 });
 
 const buildClinicalPayload = () => ({

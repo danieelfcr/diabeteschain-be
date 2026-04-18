@@ -10,6 +10,8 @@ El proyecto integra:
 - **SQLite + Sequelize** para identidad e infraestructura local.
 - **Proxy Re-Encryption** para material criptográfico delegado.
 
+Nota de esta rama: el flujo de Proxy Re-Encryption (PRE) en las orquestaciones esta deshabilitado intencionalmente para validar solo la integracion backend <-> blockchain desde Postman.
+
 **Autor:** Daniel Cabrera Reyes  
 **Universidad:** Universidad Rafael Landivar
 
@@ -77,8 +79,7 @@ Authorization: Bearer <accessToken>
   "allowedActions": ["read", "write"],
   "validFrom": "2026-04-16T00:00:00.000Z",
   "validTo": "2026-05-16T00:00:00.000Z",
-  "signature": "firma-base64",
-  "kfrags": ["kfrag-1", "kfrag-2", "kfrag-3"]
+  "signature": "firma-base64"
 }
 ```
 
@@ -94,7 +95,7 @@ Authorization: Bearer <accessToken>
 | `POST` | `/auth/login` | No | - | `email`, `password` |
 | `GET` | `/auth/users/:id/public-key` | No | - | Parámetro `id` del profesional |
 | `GET` | `/auth/patients/:pseudoId/public-key` | No | - | Parámetro `pseudoId` del paciente |
-| `POST` | `/permissions/grants` | Si | `PATIENT` | Grant firmado, ventanas de validez, scopes, acciones, `kfrags` |
+| `POST` | `/permissions/grants` | Si | `PATIENT` | Grant firmado, ventanas de validez, scopes y acciones |
 | `POST` | `/permissions/revocations` | Si | `PATIENT` | `professionalId`, `signature` |
 | `GET` | `/clinical-records/history/me` | Si | `PATIENT` | Sin payload |
 | `GET` | `/clinical-records/history/:patientPseudoId` | Si | `DOCTOR`, `LABORATORY`, `PHARMACIST` | Parámetro `patientPseudoId` |
@@ -199,8 +200,7 @@ Authorization: Bearer <accessToken>
   "allowedActions": ["read", "write"],
   "validFrom": "2026-04-16T00:00:00.000Z",
   "validTo": "2026-05-16T00:00:00.000Z",
-  "signature": "firma-base64",
-  "kfrags": ["kfrag-1", "kfrag-2", "kfrag-3"]
+  "signature": "firma-base64"
 }
 ```
 
@@ -483,7 +483,7 @@ diabeteschain-be/
 <details>
 <summary><strong>src/services/orchestration/</strong></summary>
 
-- `permission.orchestration.service.js`: coordina grants y revocations con identidad, Fabric y proxy re-encryption
+- `permission.orchestration.service.js`: coordina grants y revocations con identidad y Fabric
 - `clinicalRecord.orchestration.service.js`: coordina lectura de historia, validación de permisos y registro de eventos clínicos
 - `audit.orchestration.service.js`: coordina la consulta de auditoría del paciente
 
@@ -526,11 +526,8 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 6. Valida fechas de vigencia, scopes y acciones permitidas.
 7. Construye el payload canónico de firma del grant.
 8. Verifica la firma con la llave pública del paciente.
-9. Solicita nodos de proxy re-encryption segun la cantidad de `kfrags`.
-10. Distribuye los `kfrags` a los nodos seleccionados con estado inicial `PENDING`.
-11. Registra el permiso en Hyperledger Fabric.
-12. Actualiza la distribución de `kfrags` a estado `ACTIVE`.
-13. Devuelve el resultado del grant con la referencia del permiso creado.
+9. Registra el permiso en Hyperledger Fabric.
+10. Devuelve el resultado del grant con la referencia del permiso creado.
 
 #### `revokeAccess(payload, actor)`
 
@@ -542,8 +539,7 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 6. Verifica la firma con la llave pública del paciente.
 7. Consulta en Fabric si existe un permiso activo entre paciente y profesional.
 8. Revoca el permiso en Hyperledger Fabric.
-9. Revoca o invalida la transformacion delegada en el servicio de proxy re-encryption.
-10. Retorna el detalle de la revocacion y del permiso afectado.
+9. Retorna el detalle de la revocacion y del permiso afectado.
 
 ### ClinicalRecordOrchestrationService
 
@@ -565,14 +561,12 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 4. Consulta en Fabric los permisos activos entre paciente y profesional.
 5. Filtra solo permisos activos con accion `read`.
 6. Calcula los scopes efectivos autorizados.
-7. Recupera en Fabric el material delegado asociado a esos permisos.
-8. Filtra el material delegado segun scopes autorizados.
-9. Recupera desde Fabric las referencias clínicas del paciente.
-10. Filtra las referencias para conservar solo las permitidas por scope.
-11. Recupera desde MongoDB los documentos clinicos correspondientes.
-12. Mapea los registros con sus referencias de blockchain.
-13. Solicita al cliente de proxy re-encryption el material de acceso delegado para el frontend.
-14. Devuelve registros, permisos efectivos y material criptográfico delegado.
+7. Filtra los scopes contra el catalogo clinico activo.
+8. Recupera desde Fabric las referencias clínicas del paciente.
+9. Filtra las referencias para conservar solo las permitidas por scope.
+10. Recupera desde MongoDB los documentos clinicos correspondientes.
+11. Mapea los registros con sus referencias de blockchain.
+12. Devuelve registros, permisos efectivos y un indicador de flujo backend-blockchain sin PRE.
 
 #### `registerDoctorConsultation(payload, actor)`
 

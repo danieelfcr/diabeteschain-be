@@ -9,13 +9,18 @@ const ScopeCatalogService = require('../services/infrastructure/scopeCatalog.ser
  */
 const initializeInfrastructureDatabase = async () => {
   try {
-    await sequelize.sync({ alter: true });
+    await sequelize.authenticate();
+
+    // PRE is disabled in this branch, so only the scope catalog required by
+    // the backend-to-blockchain flow is synchronized.
+    await ScopeCatalog.sync();
+
     const scopeCatalogService = new ScopeCatalogService();
     await scopeCatalogService.seedDefaultScopes();
     console.log('Database Infrastructure initialized successfully');
   } catch (error) {
     console.error('Error initializing Infrastructure database:', error);
-    process.exit(1);
+    throw error;
   }
 };
 
