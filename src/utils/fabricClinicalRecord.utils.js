@@ -29,7 +29,9 @@ function parseFabricResult(resultBytes) {
     return null;
   }
 
-  const resultText = resultBytes.toString();
+  const resultText = Buffer.isBuffer(resultBytes)
+    ? resultBytes.toString('utf8')
+    : Buffer.from(resultBytes).toString('utf8');
 
   try {
     return JSON.parse(resultText);
