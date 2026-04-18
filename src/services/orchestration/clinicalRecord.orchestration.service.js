@@ -4,6 +4,7 @@ const FabricClinicalRecordRepository = require('../../repositories/fabricClinica
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
 const IdentityRepository = require('../../repositories/identity.repository');
 const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
+const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
 const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
 const { createAppError } = require('../../utils/app-error');
 const {
@@ -43,6 +44,7 @@ class ClinicalRecordOrchestrationService {
     this.fabricPermissionRepository = new FabricPermissionRepository();
     this.identityRepository = new IdentityRepository();
     this.proxyReencryptionClient = new ProxyReencryptionClient();
+    this.scopeCatalogService = new ScopeCatalogService();
   }
 
   /**
@@ -140,7 +142,10 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Missing required field: signature', 400);
     }
 
-    // 2. Resolve patient and professional identities from trusted sources.
+    // 2. Validate that the requested clinical scopes exist off-chain.
+    await this.scopeCatalogService.assertActiveScopeIds(requestedScopes);
+
+    // 3. Resolve patient and professional identities from trusted sources.
     const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
     if (!patient) {
       throw createAppError('Patient not found in identity repository', 404);
@@ -156,7 +161,7 @@ class ClinicalRecordOrchestrationService {
       throw createAppError(`Authenticated user must have ${requiredRole} role`, 403);
     }
 
-    // 3. Verify the signature before persisting anything.
+    // 4. Verify the signature before persisting anything.
     await this.verifyRequestSignature({
       publicKey: professional.publicKey,
       payload: signaturePayload,
@@ -164,7 +169,7 @@ class ClinicalRecordOrchestrationService {
       errorMessage: invalidSignatureMessage,
     });
 
-    // 4. Re-check the active write permission in blockchain.
+    // 5. Re-check the active write permission in blockchain.
     const permission = normalizePermission(
       await this.fabricPermissionRepository.getActivePermissionByPatientAndGrantee(
         patientPseudoId,
@@ -459,10 +464,17 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('The active permission does not grant any readable scopes', 403);
     }
 
+    const activeCatalogScopeIds = new Set(await this.scopeCatalogService.listActiveScopeIds());
+    const catalogEffectiveScopes = effectiveScopes.filter((scopeId) => activeCatalogScopeIds.has(scopeId));
+
+    if (catalogEffectiveScopes.length === 0) {
+      throw createAppError('The active permissions do not reference any active clinical scope', 403);
+    }
+
     // 4. Retrieve the delegated scope materials required for the authorized permissions
     const scopeMaterials = await this.fabricPermissionRepository.getScopeMaterialsByPermissionIds(permissionIds);
     const normalizedScopeMaterials = normalizeScopeMaterials(scopeMaterials);
-    const activeScopeMaterials = filterScopeMaterialsByScopes(normalizedScopeMaterials, effectiveScopes);
+    const activeScopeMaterials = filterScopeMaterialsByScopes(normalizedScopeMaterials, catalogEffectiveScopes);
 
     if (activeScopeMaterials.length === 0) {
       throw createAppError('No active delegated scope material found for the granted permissions', 403);

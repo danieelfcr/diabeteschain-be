@@ -70,7 +70,10 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "professionalId": "uuid-del-profesional",
-  "allowedScopes": ["general_consultation", "laboratory"],
+  "allowedScopes": [
+    "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
+    "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a"
+  ],
   "allowedActions": ["read", "write"],
   "validFrom": "2026-04-16T00:00:00.000Z",
   "validTo": "2026-05-16T00:00:00.000Z",
@@ -95,6 +98,7 @@ Authorization: Bearer <accessToken>
 | `POST` | `/permissions/revocations` | Si | `PATIENT` | `professionalId`, `signature` |
 | `GET` | `/clinical-records/history/me` | Si | `PATIENT` | Sin payload |
 | `GET` | `/clinical-records/history/:patientPseudoId` | Si | `DOCTOR`, `LABORATORY`, `PHARMACIST` | Parámetro `patientPseudoId` |
+| `GET` | `/scopes` | Si | Cualquier usuario autenticado | Sin payload |
 | `POST` | `/clinical-records/events/doctor` | Si | `DOCTOR` | `patientPseudoId`, `signature`, `encounter`, opcional `labOrder`, opcional `prescription` |
 | `POST` | `/clinical-records/events/laboratory` | Si | `LABORATORY` | `patientPseudoId`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
 | `POST` | `/clinical-records/events/pharmacy` | Si | `PHARMACIST` | `patientPseudoId`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
@@ -188,7 +192,10 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "professionalId": "uuid-profesional",
-  "allowedScopes": ["general_consultation", "laboratory"],
+  "allowedScopes": [
+    "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
+    "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a"
+  ],
   "allowedActions": ["read", "write"],
   "validFrom": "2026-04-16T00:00:00.000Z",
   "validTo": "2026-05-16T00:00:00.000Z",
@@ -239,6 +246,28 @@ Authorization: Bearer <accessToken>
 </details>
 
 <details>
+<summary><strong>GET /scopes</strong></summary>
+
+**Uso:** recuperar el catálogo off-chain de scopes clínicos disponibles para la UI.
+
+**Incluir**
+
+- Token JWT válido de cualquier usuario autenticado
+
+**Respuesta relevante**
+
+```json
+[
+  {
+    "scopeId": "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
+    "label": "Control glucemico"
+  }
+]
+```
+
+</details>
+
+<details>
 <summary><strong>POST /clinical-records/events/doctor</strong></summary>
 
 **Uso:** registrar una consulta médica y, opcionalmente, orden de laboratorio y receta.
@@ -250,7 +279,7 @@ Authorization: Bearer <accessToken>
   "patientPseudoId": "uuid-paciente",
   "signature": "firma-base64",
   "encounter": {
-    "scopeId": "general_consultation",
+    "scopeId": "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
     "payloadMetadata": {
       "payloadFormat": "FHIR_JSON",
       "fhirResourceType": "Encounter",
@@ -267,7 +296,7 @@ Authorization: Bearer <accessToken>
     }
   },
   "labOrder": {
-    "scopeId": "laboratory",
+    "scopeId": "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a",
     "payloadMetadata": {
       "fhirResourceType": "ServiceRequest"
     },
@@ -281,7 +310,7 @@ Authorization: Bearer <accessToken>
     }
   },
   "prescription": {
-    "scopeId": "pharmacy",
+    "scopeId": "40cb1d97-c0c0-4f41-8c5f-cb6ef2be52ef",
     "payloadMetadata": {
       "fhirResourceType": "MedicationRequest"
     },
@@ -314,7 +343,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "patientPseudoId": "uuid-paciente",
-  "scopeId": "laboratory",
+  "scopeId": "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a",
   "basedOn": "recordId-de-lab-order",
   "signature": "firma-base64",
   "payloadMetadata": {
@@ -346,7 +375,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "patientPseudoId": "uuid-paciente",
-  "scopeId": "pharmacy",
+  "scopeId": "40cb1d97-c0c0-4f41-8c5f-cb6ef2be52ef",
   "basedOn": "recordId-de-prescription",
   "signature": "firma-base64",
   "payloadMetadata": {
@@ -684,6 +713,7 @@ npm test
 - `MONGODB_URI`
 - `JWT_SECRET`
 - `JWT_EXPIRES_IN`
+- `SCOPES_CATALOG_KEY`
 - `FABRIC_CHANNEL`
 - `FABRIC_CHAINCODE`
 - `FABRIC_MSP_ID`
@@ -692,6 +722,8 @@ npm test
 - `FABRIC_CRYPTO_BASE`
 - `FABRIC_USER_MSP_PATH`
 - `FABRIC_TLS_CERT_PATH`
+
+`SCOPES_CATALOG_KEY` debe resolver a 32 bytes y puede declararse en base64, hex o texto plano de 32 bytes. Para generar una clave base64 de desarrollo puedes usar `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
 
 ---
 

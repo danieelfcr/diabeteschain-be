@@ -1,4 +1,5 @@
-const { sequelize, ProxyNode } = require('../models/persistence/infrastructure.schema');
+const { sequelize, ProxyNode, ScopeCatalog } = require('../models/persistence/infrastructure.schema');
+const ScopeCatalogService = require('../services/infrastructure/scopeCatalog.service');
 
 /**
  * Initialize the infrastructure database and synchronize the schema.
@@ -9,6 +10,8 @@ const { sequelize, ProxyNode } = require('../models/persistence/infrastructure.s
 const initializeInfrastructureDatabase = async () => {
   try {
     await sequelize.sync({ alter: true });
+    const scopeCatalogService = new ScopeCatalogService();
+    await scopeCatalogService.seedDefaultScopes();
     console.log('Database Infrastructure initialized successfully');
   } catch (error) {
     console.error('Error initializing Infrastructure database:', error);
@@ -16,4 +19,4 @@ const initializeInfrastructureDatabase = async () => {
   }
 };
 
-module.exports = { initializeInfrastructureDatabase, sequelize };
+module.exports = { initializeInfrastructureDatabase, sequelize, ProxyNode, ScopeCatalog };
