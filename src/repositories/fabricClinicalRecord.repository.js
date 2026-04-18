@@ -63,7 +63,7 @@ class FabricClinicalRecordRepository {
    * @returns {Promise<Array<Object>>} Ledger references or metadata.
    */
   async getPatientRecordIndexesWithAudit({ patientPseudoId, actorId, actorRole }) {
-    const result = await this.evaluateTransaction(
+    const result = await this.submitTransaction(
       'GetHistoryByPatientPseudoIdWithAudit',
       {
         patientPseudoId,

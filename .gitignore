@@ -77,3 +77,6 @@ build/
 
 # Data
 data/
+
+# Scope catalog constants
+scopeCatalog.constants.js

@@ -1,6 +1,7 @@
 const IdentityRepository = require('../../repositories/identity.repository');
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
 const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
+const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
 const { validatePermissionDates, validateActionsAndScopes } = require('../../utils/permission.utils');
 const {
   buildGrantAccessSignaturePayload,
@@ -20,6 +21,7 @@ class PermissionOrchestrationService {
     this.identityRepository = new IdentityRepository();
     this.fabricPermissionRepository = new FabricPermissionRepository();
     this.proxyReencryptionClient = new ProxyReencryptionClient();
+    this.scopeCatalogService = new ScopeCatalogService();
   }
 
   /**
@@ -84,10 +86,11 @@ class PermissionOrchestrationService {
     
     // 1.5 Validate permission dates and allowed actions/scopes
     const { validFrom, validTo } = validatePermissionDates(payload.validFrom, payload.validTo);
-    const { allowedActions, allowedScopes } = validateActionsAndScopes(
+    const { allowedActions, allowedScopes: requestedScopes } = validateActionsAndScopes(
       payload.allowedActions,
       payload.allowedScopes
     );
+    const allowedScopes = await this.scopeCatalogService.assertActiveScopeIds(requestedScopes);
 
     // 2. Verify signed permission with patient's public key
     const signaturePayload = buildGrantAccessSignaturePayload({

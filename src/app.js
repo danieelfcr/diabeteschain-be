@@ -4,6 +4,7 @@ const auditRoutes = require('./routes/audit.routes');
 const clinicalRecordRoutes = require('./routes/clinicalRecord.routes');
 const identityRoutes = require('./routes/identity.routes');
 const permissionRoutes = require('./routes/permission.routes');
+const scopeRoutes = require('./routes/scope.routes');
 const errorMiddleware = require('./middlewares/error.middleware');
 
 /**
@@ -24,6 +25,7 @@ app.use('/audit', auditRoutes);
 app.use('/clinical-records', clinicalRecordRoutes);
 app.use('/permissions', permissionRoutes);
 app.use('/auth', identityRoutes);
+app.use('/scopes', scopeRoutes);
 
 /**
  * Root endpoint used as a simple availability check for local environments.

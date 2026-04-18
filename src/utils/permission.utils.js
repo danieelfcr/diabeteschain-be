@@ -24,7 +24,8 @@ function validatePermissionDates(validFrom, validTo) {
 }
 
 /**
- * Validate that the requested actions and scopes are supported.
+ * Validate that the requested actions are supported and normalize the scope
+ * collection shape for downstream catalog validation.
  *
  * @param {string[]} actions - List of actions to validate.
  * @param {string[]} scopes - List of scopes to validate.
@@ -32,7 +33,6 @@ function validatePermissionDates(validFrom, validTo) {
  */
 function validateActionsAndScopes(actions, scopes) {
   const allowedActions = ['read', 'write'];
-  const allowedScopes = ['summary', 'labs', 'prescriptions', 'encounters'];
   const normalizedCollections = normalizePermissionSignatureCollections({
     allowedActions: actions,
     allowedScopes: scopes,
@@ -41,16 +41,8 @@ function validateActionsAndScopes(actions, scopes) {
   const invalidActions = normalizedCollections.allowedActions.filter(
     (action) => !allowedActions.includes(action)
   );
-  const invalidScopes = normalizedCollections.allowedScopes.filter(
-    (scope) => !allowedScopes.includes(scope)
-  );
-
   if (invalidActions.length > 0) {
     throw createAppError(`Invalid actions: ${invalidActions.join(', ')}`, 400);
-  }
-
-  if (invalidScopes.length > 0) {
-    throw createAppError(`Invalid scopes: ${invalidScopes.join(', ')}`, 400);
   }
 
   return normalizedCollections;
