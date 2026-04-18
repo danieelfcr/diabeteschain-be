@@ -206,9 +206,18 @@ class ClinicalRecordOrchestrationService {
    * @param {string} options.recordId - Record identifier referenced by basedOn.
    * @param {string} options.expectedRecordType - Expected base record type.
    * @param {string} options.label - Human-readable record label for errors.
+   * @param {string|null} [options.professionalId=null] - Professional identifier used for audited lookups.
+   * @param {string|null} [options.professionalRole=null] - Professional role used for audited lookups.
    * @returns {Promise<{record: Object, reference: Object}>} Base record and ledger reference.
    */
-  async resolveBaseClinicalRecord({ patientPseudoId, recordId, expectedRecordType, label }) {
+  async resolveBaseClinicalRecord({
+    patientPseudoId,
+    recordId,
+    expectedRecordType,
+    label,
+    professionalId = null,
+    professionalRole = null,
+  }) {
     if (!recordId) {
       throw createAppError('Missing required field: basedOn', 400);
     }
@@ -228,7 +237,13 @@ class ClinicalRecordOrchestrationService {
 
     const baseReference = await this.fabricClinicalRecordRepository.getClinicalRecordIndexByRecordId(
       patientPseudoId,
-      recordId
+      recordId,
+      professionalId && professionalRole
+        ? {
+            professionalId,
+            professionalRole,
+          }
+        : null
     );
 
     if (!baseReference) {
@@ -485,8 +500,8 @@ class ClinicalRecordOrchestrationService {
     // 5. Retrieve ledger references and keep only the scopes authorized by the active permission
     const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
       patientPseudoId,
-      actorId: professional.id,
-      actorRole: professionalRole,
+      professionalId: professional.id,
+      professionalRole,
     });
 
     const scopedReferences = filterReferencesByScopes(references, materialScopes);
@@ -658,6 +673,8 @@ class ClinicalRecordOrchestrationService {
       recordId: payload.basedOn,
       expectedRecordType: 'LAB_ORDER',
       label: 'Laboratory order',
+      professionalId: context.professional.id,
+      professionalRole: context.professionalRole,
     });
 
     const encounterId = baseRecordContext.record.encounterId || null;
@@ -715,6 +732,8 @@ class ClinicalRecordOrchestrationService {
       recordId: payload.basedOn,
       expectedRecordType: 'MEDICAL_PRESCRIPTION',
       label: 'Medical prescription',
+      professionalId: context.professional.id,
+      professionalRole: context.professionalRole,
     });
 
     const encounterId = baseRecordContext.record.encounterId || null;
