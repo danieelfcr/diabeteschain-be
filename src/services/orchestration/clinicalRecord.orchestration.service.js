@@ -480,7 +480,9 @@ class ClinicalRecordOrchestrationService {
     }
 
     const activeCatalogScopeIds = new Set(await this.scopeCatalogService.listActiveScopeIds());
-    const catalogEffectiveScopes = effectiveScopes.filter((scopeId) => activeCatalogScopeIds.has(scopeId));
+    const catalogEffectiveScopes = effectiveScopes.includes('*')
+      ? [...activeCatalogScopeIds]
+      : effectiveScopes.filter((scopeId) => activeCatalogScopeIds.has(scopeId));
 
     if (catalogEffectiveScopes.length === 0) {
       throw createAppError('The active permissions do not reference any active clinical scope', 403);
