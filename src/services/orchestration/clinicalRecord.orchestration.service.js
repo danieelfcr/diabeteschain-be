@@ -471,7 +471,11 @@ class ClinicalRecordOrchestrationService {
     const materialScopes = [...new Set(activeScopeMaterials.map((entry) => entry.scopeId))];
 
     // 5. Retrieve ledger references and keep only the scopes authorized by the active permission
-    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexes(patientPseudoId);
+    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
+      patientPseudoId,
+      actorId: professional.id,
+      actorRole: professionalRole,
+    });
 
     const scopedReferences = filterReferencesByScopes(references, materialScopes);
 
