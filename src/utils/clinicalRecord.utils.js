@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { createAppError } = require('./app-error');
 
 /**
@@ -350,6 +351,8 @@ function buildClinicalRecordDocument({
  * @returns {Object} Ledger clinical index payload.
  */
 function buildClinicalRecordIndex({ record, context }) {
+  const createdAt = record.createdAt ? new Date(record.createdAt).toISOString() : new Date().toISOString();
+
   return {
     recordId: record._id || record.recordId || null,
     patientId: record.patientPseudoId || context.patientPseudoId,
@@ -358,10 +361,12 @@ function buildClinicalRecordIndex({ record, context }) {
     recordType: String(record.recordType || '').toLowerCase(),
     offchainUri: buildOffchainUri(record._id || record.recordId || null),
     hash: record.integrity?.payloadHash || null,
-    createdAt: record.createdAt ? new Date(record.createdAt).toISOString() : new Date().toISOString(),
+    createdAt,
     createdBy: context.professional.id || context.actor.id || null,
     authorRole: context.authorRole,
     status: 'ACTIVE',
+    auditId: crypto.randomUUID(),
+    timestamp: createdAt,
   };
 }
 

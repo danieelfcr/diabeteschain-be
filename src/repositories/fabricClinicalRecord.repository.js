@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { getContract } = require('../config/fabric_gateway');
 const {
   getRecordIdentifier,
@@ -58,17 +59,19 @@ class FabricClinicalRecordRepository {
    *
    * @param {Object} input - Professional query context.
    * @param {string} input.patientPseudoId - Target patient pseudo identifier.
-   * @param {string} input.actorId - Authenticated professional identifier.
-   * @param {string} input.actorRole - Authenticated professional role.
+   * @param {string} input.professionalId - Authenticated professional identifier.
+   * @param {string} input.professionalRole - Authenticated professional role.
    * @returns {Promise<Array<Object>>} Ledger references or metadata.
    */
-  async getPatientRecordIndexesWithAudit({ patientPseudoId, actorId, actorRole }) {
+  async getPatientRecordIndexesWithAudit({ patientPseudoId, professionalId, professionalRole }) {
     const result = await this.submitTransaction(
       'GetHistoryByPatientPseudoIdWithAudit',
       {
         patientPseudoId,
-        actorId,
-        actorRole,
+        professionalId,
+        professionalRole,
+        auditId: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
       }
     );
 
@@ -104,10 +107,17 @@ class FabricClinicalRecordRepository {
    *
    * @param {string} patientPseudoId - Patient pseudo identifier.
    * @param {string} recordId - Clinical record identifier.
+   * @param {Object|null} [professionalContext=null] - Optional professional audit context.
    * @returns {Promise<Object|null>} Matching index or null when it does not exist.
    */
-  async getClinicalRecordIndexByRecordId(patientPseudoId, recordId) {
-    const references = await this.getPatientRecordIndexes(patientPseudoId);
+  async getClinicalRecordIndexByRecordId(patientPseudoId, recordId, professionalContext = null) {
+    const references = professionalContext?.professionalId && professionalContext?.professionalRole
+      ? await this.getPatientRecordIndexesWithAudit({
+          patientPseudoId,
+          professionalId: professionalContext.professionalId,
+          professionalRole: professionalContext.professionalRole,
+        })
+      : await this.getPatientRecordIndexes(patientPseudoId);
 
     return references.find((reference) => getRecordIdentifier(reference) === recordId) || null;
   }
