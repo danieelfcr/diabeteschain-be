@@ -54,13 +54,22 @@ function validateEncryption(value, fieldName) {
   ensureRequired(value.iv, `${fieldName}.iv`);
   ensureRequired(value.authTag, `${fieldName}.authTag`);
   ensureRequired(value.ciphertext, `${fieldName}.ciphertext`);
+  if (value.capsule !== undefined && value.capsule !== null && typeof value.capsule !== 'string') {
+    throw createAppError(`Field ${fieldName}.capsule must be a string`, 400);
+  }
 
-  return {
+  const normalized = {
     algorithm: value.algorithm || 'AES-256-GCM',
     iv: value.iv,
     authTag: value.authTag,
     ciphertext: value.ciphertext,
   };
+
+  if (value.capsule) {
+    normalized.capsule = value.capsule;
+  }
+
+  return normalized;
 }
 
 /**

@@ -81,6 +81,7 @@ function normalizeScopeMaterials(scopeMaterials = []) {
             patientId: entry.scopeMaterial.patientId || null,
             scopeId: entry.scopeMaterial.scopeId || null,
             encKScope: entry.scopeMaterial.enc_k_scope || entry.scopeMaterial.encKScope || null,
+            capsule: entry.scopeMaterial.capsule || entry.capsule || null,
             proxyIds: normalizeArray(entry.scopeMaterial.proxyIds),
             version: entry.scopeMaterial.version || null,
             status: entry.scopeMaterial.status || null,
