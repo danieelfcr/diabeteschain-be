@@ -48,19 +48,30 @@ class AuditOrchestrationService {
       throw createAppError('Only users with PATIENT role can retrieve their own audit events', 403);
     }
 
-    const patientPseudoId = actor.pseudoId || null;
-    if (!patientPseudoId) {
-      throw createAppError('Authenticated patient pseudoId is required', 400);
+    const patientUsername = actor.username || null;
+    if (!patientUsername) {
+      throw createAppError('Authenticated patient username is required', 400);
     }
 
-    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
+    const patient = await this.identityRepository.findUserByUsername(patientUsername);
     if (!patient) {
       throw createAppError('Authenticated patient not found in identity repository', 404);
+    }
+    if (this.getRoleName(patient) !== 'PATIENT') {
+      throw createAppError('Authenticated user must have PATIENT role', 403);
+    }
+
+    const patientPseudoId = patient.pseudoId || null;
+    if (!patientPseudoId) {
+      throw createAppError('Authenticated patient pseudoId is required', 400);
     }
 
     try {
       const auditEvents = await this.fabricClinicalRecordRepository.getAuditEventsByPatientPseudoId(patientPseudoId);
       return {
+        patient: {
+          username: patient.username || patientUsername,
+        },
         data: auditEvents,
       };
     } catch (error) {

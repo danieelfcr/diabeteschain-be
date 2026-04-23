@@ -28,23 +28,23 @@ router.post(
 );
 
 /**
- * GET /auth/users/:id/public-key
- * Retrieve the public key of a professional user by internal identifier.
+ * GET /auth/users/:username/public-key
+ * Retrieve the public key of a professional user by username.
  *
  * Public by design in this prototype because clients need to fetch public keys
  * before encrypted exchanges and signatures can be validated. The endpoint only
  * exposes already-public key material and no private credentials.
  */
-router.get('/users/:id/public-key', identityController.getUserPublicKey.bind(identityController));
+router.get('/users/:username/public-key', identityController.getUserPublicKey.bind(identityController));
 
 /**
- * GET /auth/patients/:pseudoId/public-key
- * Retrieve the public key of a patient user by pseudo identifier.
+ * GET /auth/patients/:username/public-key
+ * Retrieve the public key of a patient user by username.
  *
  * Public by design for the same bootstrap reason as the professional key
  * lookup: it enables the current cryptographic exchange flow without requiring
  * a prior authenticated channel.
  */
-router.get('/patients/:pseudoId/public-key', identityController.getPatientPublicKey.bind(identityController));
+router.get('/patients/:username/public-key', identityController.getPatientPublicKey.bind(identityController));
 
 module.exports = router;

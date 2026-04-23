@@ -5,6 +5,7 @@
  * each use case can evolve without sharing unrelated fields.
  */
 const { createAppError } = require('../../../utils/app-error');
+const { ensureNonEmptyString } = require('../user/user.dto.utils');
 
 class RevokeAccessDTO {
   /**
@@ -13,7 +14,7 @@ class RevokeAccessDTO {
    * @param {Object} payload - Request payload received from the client.
    */
   constructor(payload = {}) {
-    this.professionalId = payload.professionalId;
+    this.professionalUsername = payload.professionalUsername;
     this.signature = payload.signature;
   }
 
@@ -24,13 +25,18 @@ class RevokeAccessDTO {
    * @throws {Error} When any required field is missing.
    */
   validate() {
-    const requiredFields = ['professionalId', 'signature'];
+    const requiredFields = ['professionalUsername', 'signature'];
 
     for (const field of requiredFields) {
       if (!this[field]) {
         throw createAppError(`Missing required field: ${field}`, 400);
       }
     }
+
+    this.professionalUsername = ensureNonEmptyString(
+      this.professionalUsername,
+      'professionalUsername'
+    );
   }
 
   /**

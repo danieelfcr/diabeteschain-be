@@ -70,7 +70,7 @@ Authorization: Bearer <accessToken>
 
 ```json
 {
-  "professionalId": "uuid-del-profesional",
+  "professionalUsername": "doctor_user",
   "allowedScopes": [
     "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
     "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a"
@@ -102,16 +102,16 @@ Para la integracion PRE real:
 | `GET` | `/health` | No | - | Sin payload |
 | `POST` | `/auth/register` | No | - | Datos de usuario, credenciales y material criptográfico |
 | `POST` | `/auth/login` | No | - | `email`, `password` |
-| `GET` | `/auth/users/:id/public-key` | No | - | Parámetro `id` del profesional |
-| `GET` | `/auth/patients/:pseudoId/public-key` | No | - | Parámetro `pseudoId` del paciente |
+| `GET` | `/auth/users/:username/public-key` | No | - | Username del profesional |
+| `GET` | `/auth/patients/:username/public-key` | No | - | Username del paciente |
 | `POST` | `/permissions/grants` | Si | `PATIENT` | Grant firmado, ventanas de validez, scopes, acciones, `kfrags` |
-| `POST` | `/permissions/revocations` | Si | `PATIENT` | `professionalId`, `signature` |
+| `POST` | `/permissions/revocations` | Si | `PATIENT` | `professionalUsername`, `signature` |
 | `GET` | `/clinical-records/history/me` | Si | `PATIENT` | Sin payload |
-| `GET` | `/clinical-records/history/:patientPseudoId` | Si | `DOCTOR`, `LABORATORY`, `PHARMACIST` | Parámetro `patientPseudoId` |
+| `GET` | `/clinical-records/history/:patientUsername` | Si | `DOCTOR`, `LABORATORY`, `PHARMACIST` | Username del paciente |
 | `GET` | `/scopes` | Si | Cualquier usuario autenticado | Sin payload |
-| `POST` | `/clinical-records/events/doctor` | Si | `DOCTOR` | `patientPseudoId`, `signature`, `encounter`, opcional `labOrder`, opcional `prescription` |
-| `POST` | `/clinical-records/events/laboratory` | Si | `LABORATORY` | `patientPseudoId`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
-| `POST` | `/clinical-records/events/pharmacy` | Si | `PHARMACIST` | `patientPseudoId`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
+| `POST` | `/clinical-records/events/doctor` | Si | `DOCTOR` | `patientUsername`, `signature`, `encounter`, opcional `labOrder`, opcional `prescription` |
+| `POST` | `/clinical-records/events/laboratory` | Si | `LABORATORY` | `patientUsername`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
+| `POST` | `/clinical-records/events/pharmacy` | Si | `PHARMACIST` | `patientUsername`, `scopeId`, `basedOn`, `signature`, metadata de cifrado |
 | `GET` | `/audit/me` | Si | `PATIENT` | Sin payload |
 
 <details>
@@ -171,24 +171,24 @@ Para la integracion PRE real:
 </details>
 
 <details>
-<summary><strong>GET /auth/users/:id/public-key</strong></summary>
+<summary><strong>GET /auth/users/:username/public-key</strong></summary>
 
 **Uso:** obtener la llave pública de un profesional.
 
 **Incluir**
 
-- Parámetro de ruta `id`
+- Parametro de ruta `username`
 
 </details>
 
 <details>
-<summary><strong>GET /auth/patients/:pseudoId/public-key</strong></summary>
+<summary><strong>GET /auth/patients/:username/public-key</strong></summary>
 
 **Uso:** obtener la llave pública de un paciente.
 
 **Incluir**
 
-- Parámetro de ruta `pseudoId`
+- Parametro de ruta `username`
 
 </details>
 
@@ -201,7 +201,7 @@ Para la integracion PRE real:
 
 ```json
 {
-  "professionalId": "uuid-profesional",
+  "professionalUsername": "doctor_user",
   "allowedScopes": [
     "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
     "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a"
@@ -225,7 +225,7 @@ Para la integracion PRE real:
 
 ```json
 {
-  "professionalId": "uuid-profesional",
+  "professionalUsername": "doctor_user",
   "signature": "firma-base64"
 }
 ```
@@ -244,13 +244,13 @@ Para la integracion PRE real:
 </details>
 
 <details>
-<summary><strong>GET /clinical-records/history/:patientPseudoId</strong></summary>
+<summary><strong>GET /clinical-records/history/:patientUsername</strong></summary>
 
 **Uso:** un profesional recupera el historial delegado de un paciente.
 
 **Incluir**
 
-- Parámetro de ruta `patientPseudoId`
+- Parametro de ruta `patientUsername`
 - Token JWT de un `DOCTOR`, `LABORATORY` o `PHARMACIST`
 
 </details>
@@ -286,7 +286,7 @@ Para la integracion PRE real:
 
 ```json
 {
-  "patientPseudoId": "uuid-paciente",
+  "patientUsername": "patient_user",
   "signature": "firma-base64",
   "encounter": {
     "scopeId": "8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2",
@@ -352,7 +352,7 @@ Para la integracion PRE real:
 
 ```json
 {
-  "patientPseudoId": "uuid-paciente",
+  "patientUsername": "patient_user",
   "scopeId": "c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a",
   "basedOn": "recordId-de-lab-order",
   "signature": "firma-base64",
@@ -384,7 +384,7 @@ Para la integracion PRE real:
 
 ```json
 {
-  "patientPseudoId": "uuid-paciente",
+  "patientUsername": "patient_user",
   "scopeId": "40cb1d97-c0c0-4f41-8c5f-cb6ef2be52ef",
   "basedOn": "recordId-de-prescription",
   "signature": "firma-base64",
@@ -502,7 +502,7 @@ diabeteschain-be/
 <details>
 <summary><strong>src/repositories/</strong></summary>
 
-- `identity.repository.js`: usuarios, búsquedas por email, `id`, `pseudoId` y verificación de firma
+- `identity.repository.js`: usuarios, busquedas por email, username, identificadores internos y verificacion de firma
 - `clinicalRecord.repository.js`: documentos clínicos cifrados en MongoDB
 - `fabricPermission.repository.js`: permisos activos, revocaciones y materiales de alcance en Fabric
 - `fabricClinicalRecord.repository.js`: índices clínicos y eventos de auditoría en Fabric
@@ -529,9 +529,9 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 #### `grantAccess(payload, actor)`
 
 1. Verifica que exista usuario autenticado y que su rol sea `PATIENT`.
-2. Toma el `pseudoId` del paciente autenticado.
-3. Recupera al paciente desde identidad.
-4. Recupera al profesional destino por `professionalId`.
+2. Toma el username del paciente autenticado.
+3. Recupera al paciente desde identidad y deriva su `pseudoId` interno.
+4. Recupera al profesional destino por `professionalUsername`.
 5. Valida que el destinatario sea `DOCTOR`, `LABORATORY` o `PHARMACIST`.
 6. Valida fechas de vigencia, scopes y acciones permitidas.
 7. Construye el payload canónico de firma del grant.
@@ -545,8 +545,8 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 #### `revokeAccess(payload, actor)`
 
 1. Verifica autenticacion y rol `PATIENT`.
-2. Obtiene el `pseudoId` del paciente autenticado.
-3. Resuelve paciente y profesional desde el repositorio de identidad.
+2. Obtiene el username del paciente autenticado.
+3. Resuelve paciente y profesional desde el repositorio de identidad usando usernames.
 4. Verifica que el profesional tenga un rol clínico válido.
 5. Construye el payload canónico de firma de revocación.
 6. Verifica la firma con la llave pública del paciente.
@@ -560,8 +560,8 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 #### `getPatientHistory(payload, actor)`
 
 1. Verifica autenticacion y rol `PATIENT`.
-2. Obtiene el `pseudoId` desde el actor autenticado.
-3. Confirma que el paciente exista en el dominio de identidad.
+2. Obtiene el username desde el actor autenticado.
+3. Confirma que el paciente exista en el dominio de identidad y deriva su `pseudoId` interno.
 4. Recupera los índices clínicos del paciente desde Fabric.
 5. Recupera los documentos clínicos cifrados desde MongoDB.
 6. Relaciona referencias on-chain con documentos off-chain.
@@ -570,8 +570,8 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 #### `getProfessionalHistory(payload, actor)`
 
 1. Verifica autenticación y que el actor sea un profesional de salud válido.
-2. Toma el `id` del profesional autenticado y el `patientPseudoId` solicitado.
-3. Resuelve paciente y profesional desde identidad.
+2. Toma el username del profesional autenticado y el `patientUsername` solicitado.
+3. Resuelve paciente y profesional desde identidad usando usernames.
 4. Consulta en Fabric los permisos activos entre paciente y profesional.
 5. Filtra solo permisos activos con accion `read`.
 6. Calcula los scopes efectivos autorizados.
@@ -618,8 +618,8 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 
 1. Verifica autenticación del actor.
 2. Valida que el rol autenticado coincida con el rol requerido por el caso de uso.
-3. Valida presencia de `patientPseudoId` y `signature`.
-4. Resuelve paciente y profesional desde identidad.
+3. Valida presencia de `patientUsername` y `signature`.
+4. Resuelve paciente y profesional desde identidad usando usernames.
 5. Verifica la firma del request con la llave pública del profesional.
 6. Consulta en Fabric el permiso activo entre paciente y profesional.
 7. Verifica que el permiso permita accion `write`.
@@ -654,8 +654,8 @@ Esta sección resume los pasos que sigue cada caso de uso principal. La idea es 
 #### `getMyAuditEvents(actor)`
 
 1. Verifica autenticación y rol `PATIENT`.
-2. Obtiene el `pseudoId` del actor autenticado.
-3. Confirma que el paciente exista en identidad.
+2. Obtiene el username del actor autenticado.
+3. Confirma que el paciente exista en identidad y deriva su `pseudoId` interno.
 4. Consulta en Fabric los eventos de auditoría del paciente.
 5. Devuelve la línea de auditoría normalizada.
 
@@ -683,17 +683,17 @@ Aunque no pertenece a `services/orchestration/`, forma parte del flujo funcional
 5. Construye el payload del JWT.
 6. Devuelve usuario autenticado y datos para generar el token.
 
-#### `getProfessionalPublicKeyById(id)`
+#### `getProfessionalPublicKeyByUsername(username)`
 
-1. Valida que el `id` tenga formato UUID.
-2. Busca el usuario por identificador interno.
+1. Recibe el username publico del profesional.
+2. Busca el usuario por username.
 3. Verifica que no sea paciente.
 4. Devuelve la llave pública en formato de respuesta segura.
 
-#### `getPatientPublicKeyByPseudoId(pseudoId)`
+#### `getPatientPublicKeyByUsername(username)`
 
-1. Valida que el `pseudoId` tenga formato UUID.
-2. Busca el usuario por pseudoidentificador.
+1. Recibe el username publico del paciente.
+2. Busca el usuario por username.
 3. Verifica que sí sea paciente.
 4. Devuelve la llave pública del paciente.
 

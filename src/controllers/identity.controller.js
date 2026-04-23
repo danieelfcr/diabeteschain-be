@@ -93,7 +93,7 @@ class IdentityController {
   }
 
   /**
-   * Retrieve the public key of a professional user by internal identifier.
+   * Retrieve the public key of a professional user by username.
    *
    * @param {import('express').Request} req - The express request object.
    * @param {import('express').Response} res - The express response object.
@@ -102,7 +102,7 @@ class IdentityController {
   async getUserPublicKey(req, res, next) {
     try {
       const payload = GetUserPublicKeyDTO.from(req.params);
-      const user = await this.identityService.getProfessionalPublicKeyById(payload.id);
+      const user = await this.identityService.getProfessionalPublicKeyByUsername(payload.username);
 
       return res.status(200).json({
         message: 'Public key retrieved successfully',
@@ -114,7 +114,7 @@ class IdentityController {
   }
 
   /**
-   * Retrieve the public key of a patient user by pseudo identifier.
+   * Retrieve the public key of a patient user by username.
    *
    * @param {import('express').Request} req - The express request object.
    * @param {import('express').Response} res - The express response object.
@@ -123,7 +123,7 @@ class IdentityController {
   async getPatientPublicKey(req, res, next) {
     try {
       const payload = GetPatientPublicKeyDTO.from(req.params);
-      const user = await this.identityService.getPatientPublicKeyByPseudoId(payload.pseudoId);
+      const user = await this.identityService.getPatientPublicKeyByUsername(payload.username);
 
       return res.status(200).json({
         message: 'Public key retrieved successfully',

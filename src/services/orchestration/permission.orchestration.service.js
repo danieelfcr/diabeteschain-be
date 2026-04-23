@@ -65,19 +65,27 @@ class PermissionOrchestrationService {
       throw createAppError('Only users with PATIENT role can grant access', 403);
     }
 
-    // 1.2 Get patient's public key from IdentityRepository using actor's pseudoId
-    const patientPseudoId = actor.pseudoId || null;
+    // 1.2 Resolve the authenticated patient by username.
+    const patientUsername = actor.username || null;
+    if (!patientUsername) {
+      throw createAppError('Authenticated patient username is required', 400);
+    }
+
+    const patient = await this.identityRepository.findUserByUsername(patientUsername);
+    if (!patient) {
+      throw createAppError('Authenticated patient not found in identity repository', 404);
+    }
+    if (this.getRoleName(patient) !== 'PATIENT') {
+      throw createAppError('Authenticated user must have PATIENT role', 403);
+    }
+
+    const patientPseudoId = patient.pseudoId || null;
     if (!patientPseudoId) {
       throw createAppError('Authenticated patient pseudoId is required', 400);
     }
 
-    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
-    if (!patient) {
-      throw createAppError('Authenticated patient not found in identity repository', 404);
-    }
-
-    // 1.3 Confirm grantee's identity and role from IdentityRepository using payload.granteeId
-    const grantee = await this.identityRepository.findUserById(payload.professionalId);
+    // 1.3 Confirm grantee's identity and role from IdentityRepository using username.
+    const grantee = await this.identityRepository.findUserByUsername(payload.professionalUsername);
     if (!grantee) {
       throw createAppError('Grantee healthcare professional not found in identity repository', 404);
     }
@@ -99,8 +107,8 @@ class PermissionOrchestrationService {
 
     // 2. Verify signed permission with patient's public key
     const signaturePayload = buildGrantAccessSignaturePayload({
-      patientPseudoId,
-      granteeId: grantee.id,
+      patientUsername: patient.username,
+      professionalUsername: grantee.username,
       allowedActions,
       allowedScopes,
       validFrom,
@@ -146,7 +154,7 @@ class PermissionOrchestrationService {
       validFrom,
       validTo,
       proxyIds: selectedProxies.map((p) => p.id),
-      createdBy: actor.id,
+      createdBy: patient.id,
       signature: payload.signature,
     });
 
@@ -162,6 +170,13 @@ class PermissionOrchestrationService {
       message: 'Access grant orchestration completed successfully',
       status: 'success',
       action: 'grant_access',
+      patient: {
+        username: patient.username,
+      },
+      professional: {
+        username: grantee.username,
+        role: granteeRole,
+      },
       permission,
     };
   }
@@ -183,19 +198,27 @@ class PermissionOrchestrationService {
       throw createAppError('Only users with PATIENT role can revoke access', 403);
     }
 
-    // 1.2 Resolve the patient pseudoId from the authenticated actor only.
-    const patientPseudoId = actor.pseudoId || null;
+    // 1.2 Resolve the patient identity from the authenticated username.
+    const patientUsername = actor.username || null;
+    if (!patientUsername) {
+      throw createAppError('Authenticated patient username is required', 400);
+    }
+
+    // 1.3 Resolve patient and professional identities from trusted sources.
+    const patient = await this.identityRepository.findUserByUsername(patientUsername);
+    if (!patient) {
+      throw createAppError('Authenticated patient not found in identity repository', 404);
+    }
+    if (this.getRoleName(patient) !== 'PATIENT') {
+      throw createAppError('Authenticated user must have PATIENT role', 403);
+    }
+
+    const patientPseudoId = patient.pseudoId || null;
     if (!patientPseudoId) {
       throw createAppError('Authenticated patient pseudoId is required', 400);
     }
 
-    // 1.3 Resolve patient and professional identities from trusted sources.
-    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
-    if (!patient) {
-      throw createAppError('Authenticated patient not found in identity repository', 404);
-    }
-
-    const grantee = await this.identityRepository.findUserById(payload.professionalId);
+    const grantee = await this.identityRepository.findUserByUsername(payload.professionalUsername);
     if (!grantee) {
       throw createAppError('Healthcare professional not found in identity repository', 404);
     }
@@ -208,8 +231,8 @@ class PermissionOrchestrationService {
 
     // 2. Verify the signed revoke intent with the patient's public key.
     const signaturePayload = buildRevokeAccessSignaturePayload({
-      patientPseudoId,
-      granteeId: grantee.id,
+      patientUsername: patient.username,
+      professionalUsername: grantee.username,
     });
 
     const isSignatureValid = await this.identityRepository.verifySignature({
@@ -237,7 +260,7 @@ class PermissionOrchestrationService {
       permissionId: activePermission.id || activePermission.permissionId || null,
       patientId: patientPseudoId,
       granteeId: grantee.id,
-      revokedBy: actor.id,
+      revokedBy: patient.id,
       signature: payload.signature,
     });
 
@@ -257,8 +280,8 @@ class PermissionOrchestrationService {
       status: 'success',
       action: 'revoke_access',
       revocation: {
-        patientPseudoId,
-        professionalId: grantee.id,
+        patientUsername: patient.username,
+        professionalUsername: grantee.username,
         revokedPermissionId: activePermission.id || activePermission.permissionId || null,
         permission: revocation,
         proxyDistribution: proxyRevocation,
@@ -280,6 +303,7 @@ class PermissionOrchestrationService {
     return {
       id: actor.id || null,
       pseudoId: actor.pseudoId || null,
+      username: actor.username || null,
       role: actor.role?.name || actor.role || null,
     };
   }

@@ -38,11 +38,11 @@ router.get(
 );
 
 /**
- * GET /clinical-records/history/:patientPseudoId
+ * GET /clinical-records/history/:patientUsername
  * Retrieve a patient's history as an authorized healthcare professional.
  */
 router.get(
-  '/history/:patientPseudoId',
+  '/history/:patientUsername',
   authMiddleware,
   authorizeRoles('DOCTOR', 'LABORATORY', 'PHARMACIST'),
   clinicalRecordController.getProfessionalHistory.bind(clinicalRecordController)

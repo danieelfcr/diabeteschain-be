@@ -49,7 +49,7 @@ class ClinicalRecordController {
   async getProfessionalHistory(req, res, next) {
     try {
       const payload = req.validatedBody || GetProfessionalHistoryDTO.from({
-        patientPseudoId: req.params.patientPseudoId,
+        patientUsername: req.params.patientUsername,
       });
 
       const result = await this.orchestrationService.getProfessionalHistory(payload, req.user);
