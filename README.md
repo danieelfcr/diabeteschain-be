@@ -57,7 +57,8 @@ Authorization: Bearer <accessToken>
     "algorithm": "AES-256-GCM",
     "iv": "base64-iv",
     "authTag": "base64-auth-tag",
-    "ciphertext": "base64-ciphertext"
+    "ciphertext": "base64-ciphertext",
+    "capsule": "base64-umbral-capsule"
   },
   "integrity": {
     "payloadHash": "sha256-hash"
@@ -78,9 +79,18 @@ Authorization: Bearer <accessToken>
   "validFrom": "2026-04-16T00:00:00.000Z",
   "validTo": "2026-05-16T00:00:00.000Z",
   "signature": "firma-base64",
-  "kfrags": ["kfrag-1", "kfrag-2", "kfrag-3"]
+  "kfrags": [
+    "base64-verified-kfrag-1",
+    "base64-verified-kfrag-2",
+    "base64-verified-kfrag-3"
+  ]
 }
 ```
+
+Para la integracion PRE real:
+
+- `kfrags` debe contener `VerifiedKeyFrag` serializados en base64
+- `encryption.capsule` debe preservarse en los registros clinicos para permitir `reencrypt` real
 
 ---
 

@@ -5,6 +5,7 @@ const FabricPermissionRepository = require('../../repositories/fabricPermission.
 const IdentityRepository = require('../../repositories/identity.repository');
 const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
 const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
+const ProxyNodeService = require('../infrastructure/proxyNode.service');
 const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
 const { createAppError } = require('../../utils/app-error');
 const {
@@ -30,6 +31,8 @@ const {
   buildPharmacyDispatchSignaturePayload,
 } = require('../../utils/signaturePayload.utils');
 
+const PRE_THRESHOLD = Number(process.env.PRE_THRESHOLD || 3);
+
 /**
  * Service responsible for coordinating clinical record use cases.
  */
@@ -45,6 +48,7 @@ class ClinicalRecordOrchestrationService {
     this.identityRepository = new IdentityRepository();
     this.proxyReencryptionClient = new ProxyReencryptionClient();
     this.scopeCatalogService = new ScopeCatalogService();
+    this.proxyNodeService = new ProxyNodeService();
   }
 
   /**
@@ -497,6 +501,7 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('No active delegated scope material found for the granted permissions', 403);
     }
 
+    const capsuleByScope = this.buildScopeCapsuleMap(activeScopeMaterials);
     const materialScopes = [...new Set(activeScopeMaterials.map((entry) => entry.scopeId))];
 
     // 5. Retrieve ledger references and keep only the scopes authorized by the active permission
@@ -507,14 +512,15 @@ class ClinicalRecordOrchestrationService {
     });
 
     const scopedReferences = filterReferencesByScopes(references, materialScopes);
+    const enrichedScopedReferences = this.enrichReferencesWithScopeCapsules(scopedReferences, capsuleByScope);
 
     // 6. Retrieve encrypted off-chain records linked to the authorized references
-    const records = scopedReferences.length
-      ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(scopedReferences, patientPseudoId)
+    const records = enrichedScopedReferences.length
+      ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(enrichedScopedReferences, patientPseudoId)
       : [];
 
     const referenceMap = new Map(
-      scopedReferences
+      enrichedScopedReferences
         .map((reference) => [getRecordIdentifier(reference), reference])
         .filter(([recordId]) => Boolean(recordId))
     );
@@ -523,7 +529,11 @@ class ClinicalRecordOrchestrationService {
       mapClinicalRecord(record, referenceMap.get(getRecordIdentifier(record)) || null)
     );
 
-    // 7. Resolve the delegated cryptographic material required by the frontend
+    // 7. Resolve Fabric proxy identifiers into real infrastructure endpoints.
+    const proxyIds = this.extractProxyIdsFromScopeMaterials(activeScopeMaterials);
+    const proxyNodes = await this.proxyNodeService.getProxyNodesByIds(proxyIds);
+
+    // 8. Resolve the delegated cryptographic material required by the frontend.
     const delegatedAccessMaterial = await this.proxyReencryptionClient.getDelegatedAccessMaterial({
       patientPseudoId,
       granteeId: professional.id,
@@ -531,7 +541,9 @@ class ClinicalRecordOrchestrationService {
       permissionIds,
       effectiveScopes: materialScopes,
       scopeMaterials: activeScopeMaterials,
-      references: scopedReferences,
+      proxyNodes,
+      threshold: PRE_THRESHOLD,
+      references: enrichedScopedReferences,
       records: mappedRecords,
     });
 
@@ -781,6 +793,145 @@ class ClinicalRecordOrchestrationService {
       pseudoId: actor.pseudoId || null,
       role: actor.role?.name || actor.role || null,
     };
+  }
+
+  /**
+   * Build a strict scope-to-capsule lookup from active Fabric scope material.
+   *
+   * @param {Array<Object>} scopeMaterials - Normalized Fabric scope material.
+   * @returns {Map<string, Object>} Capsule lookup keyed by scopeId.
+   */
+  buildScopeCapsuleMap(scopeMaterials = []) {
+    const capsuleByScope = new Map();
+
+    for (const entry of Array.isArray(scopeMaterials) ? scopeMaterials : []) {
+      const scopeId = entry?.scopeId || entry?.scopeMaterial?.scopeId || null;
+      if (!scopeId) {
+        throw createAppError(
+          'Authorized scope material is missing scopeId required to resolve blockchain capsule',
+          500,
+          'pre_scope_material_invalid'
+        );
+      }
+
+      const capsule = entry?.scopeMaterial?.capsule ?? entry?.capsule ?? null;
+      if (!capsule) {
+        throw createAppError(
+          `Authorized scope material for scope ${scopeId} is missing blockchain Umbral capsule`,
+          500,
+          'pre_scope_material_capsule_missing'
+        );
+      }
+
+      capsuleByScope.set(scopeId, this.normalizeSerializedCapsule(capsule, scopeId));
+    }
+
+    return capsuleByScope;
+  }
+
+  /**
+   * Normalize the serialized capsule shape accepted by the PRE service.
+   *
+   * @param {*} capsule - Capsule payload from Fabric scope material.
+   * @param {string} scopeId - Scope used in validation errors.
+   * @returns {Object} Normalized serialized capsule.
+   */
+  normalizeSerializedCapsule(capsule, scopeId) {
+    if (typeof capsule === 'string') {
+      const value = capsule.trim();
+      if (!value) {
+        throw createAppError(
+          `Authorized scope material for scope ${scopeId} has an empty blockchain Umbral capsule`,
+          500,
+          'pre_scope_material_capsule_invalid'
+        );
+      }
+
+      return {
+        format: 'umbral-capsule/base64',
+        value,
+      };
+    }
+
+    if (capsule && typeof capsule === 'object' && !Array.isArray(capsule)) {
+      const format = typeof capsule.format === 'string' ? capsule.format.trim() : null;
+      const value = typeof capsule.value === 'string' ? capsule.value.trim() : capsule.value;
+
+      if (!format || value === undefined || value === null || value === '') {
+        throw createAppError(
+          `Authorized scope material for scope ${scopeId} has an invalid blockchain Umbral capsule`,
+          500,
+          'pre_scope_material_capsule_invalid'
+        );
+      }
+
+      return {
+        ...capsule,
+        format,
+        value,
+      };
+    }
+
+    throw createAppError(
+      `Authorized scope material for scope ${scopeId} must provide blockchain Umbral capsule as a base64 string or { format, value } object`,
+      500,
+      'pre_scope_material_capsule_invalid'
+    );
+  }
+
+  /**
+   * Attach blockchain capsules to authorized references by matching scopeId.
+   *
+   * @param {Array<Object>} references - Authorized ledger references.
+   * @param {Map<string, Object>} capsuleByScope - Capsule lookup from Fabric.
+   * @returns {Array<Object>} References enriched with blockchain capsules.
+   */
+  enrichReferencesWithScopeCapsules(references = [], capsuleByScope = new Map()) {
+    const missingCapsules = [];
+
+    const enrichedReferences = (Array.isArray(references) ? references : []).map((reference) => {
+      const scopeId = reference?.scopeId || reference?.scope || null;
+      const capsule = scopeId ? capsuleByScope.get(scopeId) : null;
+
+      if (!capsule) {
+        missingCapsules.push(getRecordIdentifier(reference) || scopeId || 'unknown-record');
+      }
+
+      return {
+        ...reference,
+        ...(capsule ? { capsule } : {}),
+      };
+    });
+
+    if (missingCapsules.length > 0) {
+      throw createAppError(
+        `Authorized clinical references are missing blockchain Umbral capsules required for PRE: ${missingCapsules.join(', ')}`,
+        500,
+        'pre_reference_capsule_missing'
+      );
+    }
+
+    return enrichedReferences;
+  }
+
+  /**
+   * Extract unique PRE proxy node identifiers from active scope material.
+   *
+   * @param {Array<Object>} scopeMaterials - Normalized Fabric scope material.
+   * @returns {string[]} Unique proxy node identifiers.
+   */
+  extractProxyIdsFromScopeMaterials(scopeMaterials = []) {
+    const proxyIds = [...new Set(
+      (Array.isArray(scopeMaterials) ? scopeMaterials : []).flatMap((entry) =>
+        Array.isArray(entry?.scopeMaterial?.proxyIds) ? entry.scopeMaterial.proxyIds.filter(Boolean) : []
+      )
+    )];
+
+    if (proxyIds.length === 0) {
+      throw createAppError('Active delegated scope material is missing PRE proxy node identifiers', 500, 'pre_proxy_ids_missing');
+    }
+
+    return proxyIds;
   }
 }
 
