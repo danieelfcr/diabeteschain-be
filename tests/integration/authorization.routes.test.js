@@ -45,7 +45,7 @@ const buildToken = ({ id, pseudoId = null, role, professionalId = null }) =>
   });
 
 const buildGrantPayload = () => ({
-  professionalId: 'professional-001',
+  professionalUsername: 'doctor_user',
   allowedScopes: ['8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2'],
   allowedActions: ['READ', 'WRITE'],
   validFrom: '2026-01-01T00:00:00.000Z',
@@ -58,7 +58,7 @@ const buildGrantPayload = () => ({
 });
 
 const buildClinicalPayload = () => ({
-  patientPseudoId: 'patient-pseudo-001',
+  patientUsername: 'patient_user',
   scopeId: 'c91a0f5b-7e72-41df-a8f5-8c0d5b6f991a',
   basedOn: 'record-001',
   signature: 'record-signature',

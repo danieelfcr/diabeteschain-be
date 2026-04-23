@@ -16,15 +16,19 @@ describe('PermissionOrchestrationService grantAccess', () => {
     }));
 
     service.identityRepository = {
-      findUserByPseudoId: jest.fn().mockResolvedValue({
-        id: 'patient-user-001',
-        pseudoId: 'patient-001',
-        publicKey: 'patient-public-key',
-      }),
-      findUserById: jest.fn().mockResolvedValue({
-        id: 'professional-001',
-        role: { name: 'DOCTOR' },
-      }),
+      findUserByUsername: jest.fn()
+        .mockResolvedValueOnce({
+          id: 'patient-user-001',
+          pseudoId: 'patient-001',
+          username: 'patient_user',
+          publicKey: 'patient-public-key',
+          role: { name: 'PATIENT' },
+        })
+        .mockResolvedValueOnce({
+          id: 'professional-001',
+          username: 'doctor_user',
+          role: { name: 'DOCTOR' },
+        }),
       verifySignature: jest.fn().mockReturnValue(true),
     };
     service.scopeCatalogService = {
@@ -42,7 +46,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
     };
 
     await service.grantAccess({
-      professionalId: 'professional-001',
+      professionalUsername: 'doctor_user',
       allowedScopes,
       allowedActions: ['read'],
       validFrom: '2026-01-01T00:00:00.000Z',
@@ -56,10 +60,15 @@ describe('PermissionOrchestrationService grantAccess', () => {
     }, {
       id: 'patient-user-001',
       pseudoId: 'patient-001',
+      username: 'patient_user',
       role: 'PATIENT',
     });
 
     const fabricPayload = service.fabricPermissionRepository.grantAccess.mock.calls[0][0];
+    expect(service.identityRepository.verifySignature.mock.calls[0][0].payload).toMatchObject({
+      patientUsername: 'patient_user',
+      professionalUsername: 'doctor_user',
+    });
     expect(fabricPayload).toMatchObject({
       patientId: 'patient-001',
       granteeId: 'professional-001',

@@ -19,8 +19,8 @@ describe('IdentityRepository.verifySignature', () => {
   it('validates signatures using the canonical payload representation', () => {
     const signedPayload = {
       action: 'GRANT_ACCESS',
-      patientPseudoId: 'patient-001',
-      granteeId: 'doctor-001',
+      patientUsername: 'patient_user',
+      professionalUsername: 'doctor_user',
       allowedActions: ['read', 'write'],
       allowedScopes: ['labs', 'summary'],
       validFrom: '2026-04-16T00:00:00.000Z',
@@ -32,8 +32,8 @@ describe('IdentityRepository.verifySignature', () => {
       validTo: '2026-04-17T00:00:00.000Z',
       allowedScopes: ['labs', 'summary'],
       allowedActions: ['read', 'write'],
-      granteeId: 'doctor-001',
-      patientPseudoId: 'patient-001',
+      professionalUsername: 'doctor_user',
+      patientUsername: 'patient_user',
       action: 'GRANT_ACCESS',
       validFrom: '2026-04-16T00:00:00.000Z',
     };
@@ -50,14 +50,14 @@ describe('IdentityRepository.verifySignature', () => {
   it('fails verification when a signed field changes', () => {
     const signedPayload = {
       action: 'REVOKE_ACCESS',
-      patientPseudoId: 'patient-001',
-      granteeId: 'doctor-001',
+      patientUsername: 'patient_user',
+      professionalUsername: 'doctor_user',
     };
 
     const signature = signPayload(signedPayload);
     const tamperedPayload = {
       ...signedPayload,
-      granteeId: 'doctor-002',
+      professionalUsername: 'other_doctor',
     };
 
     expect(

@@ -29,15 +29,15 @@ describe('signaturePayload.utils', () => {
 
     expect(
       buildGrantAccessSignaturePayload({
-        patientPseudoId: 'patient-001',
-        granteeId: 'doctor-001',
+        patientUsername: 'patient_user',
+        professionalUsername: 'doctor_user',
         ...collections,
         ...validityPeriod,
       })
     ).toEqual({
       action: 'GRANT_ACCESS',
-      patientPseudoId: 'patient-001',
-      granteeId: 'doctor-001',
+      patientUsername: 'patient_user',
+      professionalUsername: 'doctor_user',
       allowedActions: ['read', 'write'],
       allowedScopes: ['labs', 'summary'],
       validFrom: '2026-04-16T00:30:00.000Z',
@@ -56,7 +56,7 @@ describe('signaturePayload.utils', () => {
 
   it('builds the explicit doctor consultation signature contract only with signed fields', () => {
     const signaturePayload = buildDoctorConsultationSignaturePayload({
-      patientPseudoId: 'patient-001',
+      patientUsername: 'patient_user',
       encounter: {
         scopeId: 'encounters',
         payloadMetadata: {
@@ -81,7 +81,7 @@ describe('signaturePayload.utils', () => {
 
     expect(signaturePayload).toEqual({
       action: 'REGISTER_DOCTOR_CONSULTATION',
-      patientPseudoId: 'patient-001',
+      patientUsername: 'patient_user',
       encounter: {
         recordType: 'ENCOUNTER',
         scopeId: 'encounters',
