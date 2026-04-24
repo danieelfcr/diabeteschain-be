@@ -269,25 +269,27 @@ describe('Identity routes integration', () => {
     });
   });
 
-  describe('GET /auth/users/:id/public-key', () => {
+  describe('GET /auth/users/:username/public-key', () => {
     it('debe retornar la publicKey de un profesional existente', async () => {
       const user = await createUser({
         roleName: 'DOCTOR',
+        username: 'doctor_public_key_user',
         pseudoId: null,
         professionalId: 'COL-67890',
         publicKey: 'doctor-public-key',
       });
 
-      const response = await request(app).get(`/auth/users/${user.id}/public-key`);
+      const response = await request(app).get(`/auth/users/${user.username}/public-key`);
 
       expect(response.status).toBe(200);
-      expect(response.body.user.id).toBe(user.id);
+      expect(response.body.user.username).toBe(user.username);
+      expect(response.body.user.id).toBeUndefined();
       expect(response.body.user.publicKey).toBe('doctor-public-key');
       expect(response.body.user.role).toBe('DOCTOR');
     });
 
     it('debe retornar 404 si el usuario no existe', async () => {
-      const response = await request(app).get('/auth/users/11111111-1111-4111-8111-111111111111/public-key');
+      const response = await request(app).get('/auth/users/missing_doctor/public-key');
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('User not found');
@@ -296,37 +298,40 @@ describe('Identity routes integration', () => {
     it('debe retornar 404 si el usuario existe pero no tiene publicKey', async () => {
       const user = await createUser({
         roleName: 'DOCTOR',
+        username: 'doctor_without_key',
         pseudoId: null,
         professionalId: 'COL-22222',
         publicKey: '',
       });
 
-      const response = await request(app).get(`/auth/users/${user.id}/public-key`);
+      const response = await request(app).get(`/auth/users/${user.username}/public-key`);
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Public key not found for this user');
     });
   });
 
-  describe('GET /auth/patients/:pseudoId/public-key', () => {
+  describe('GET /auth/patients/:username/public-key', () => {
     it('debe retornar la publicKey de un paciente existente', async () => {
       const user = await createUser({
         roleName: 'PATIENT',
+        username: 'patient_public_key_user',
         pseudoId: '11111111-1111-4111-8111-111111111111',
         professionalId: null,
         publicKey: 'patient-public-key-2',
       });
 
-      const response = await request(app).get(`/auth/patients/${user.pseudoId}/public-key`);
+      const response = await request(app).get(`/auth/patients/${user.username}/public-key`);
 
       expect(response.status).toBe(200);
-      expect(response.body.user.pseudoId).toBe(user.pseudoId);
+      expect(response.body.user.username).toBe(user.username);
+      expect(response.body.user.pseudoId).toBeUndefined();
       expect(response.body.user.publicKey).toBe('patient-public-key-2');
       expect(response.body.user.role).toBe('PATIENT');
     });
 
     it('debe retornar 404 si el paciente no existe', async () => {
-      const response = await request(app).get('/auth/patients/22222222-2222-4222-8222-222222222222/public-key');
+      const response = await request(app).get('/auth/patients/missing_patient/public-key');
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('User not found');
@@ -335,12 +340,13 @@ describe('Identity routes integration', () => {
     it('debe retornar 404 si el paciente existe pero no tiene publicKey', async () => {
       const user = await createUser({
         roleName: 'PATIENT',
+        username: 'patient_without_key',
         pseudoId: '33333333-3333-4333-8333-333333333333',
         professionalId: null,
         publicKey: '',
       });
 
-      const response = await request(app).get(`/auth/patients/${user.pseudoId}/public-key`);
+      const response = await request(app).get(`/auth/patients/${user.username}/public-key`);
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Public key not found for this user');

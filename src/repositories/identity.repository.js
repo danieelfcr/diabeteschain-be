@@ -105,6 +105,24 @@ class IdentityRepository {
   }
 
   /**
+   * Find a user by username including role metadata.
+   *
+   * @param {string} username - Public username used by API clients.
+   * @returns {Promise<Object|null>} Matching user or null when it does not exist.
+   * @throws {Error} When query execution fails.
+   */
+  async findUserByUsername(username) {
+    try {
+      return await User.findOne({
+        where: { username },
+        include: [{ model: Role, as: 'role' }],
+      });
+    } catch (error) {
+      throw new Error(`Error finding user by username: ${error.message}`);
+    }
+  }
+
+  /**
    * Verify a detached signature against the canonical representation of a
    * structured payload using the provided public key.
    *

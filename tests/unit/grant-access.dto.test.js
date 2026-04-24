@@ -2,7 +2,7 @@ const GrantAccessDTO = require('../../src/models/api/permissions/grant-access.dt
 
 describe('GrantAccessDTO', () => {
   const buildPayload = (overrides = {}) => ({
-    professionalId: 'professional-001',
+    professionalUsername: 'doctor_user',
     allowedScopes: ['scope-001'],
     allowedActions: ['read'],
     validFrom: '2026-01-01T00:00:00.000Z',

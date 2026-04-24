@@ -107,7 +107,7 @@ class ClinicalRecordOrchestrationService {
    * @param {Object} options - Context resolution options.
    * @param {Object} options.actor - Authenticated actor.
    * @param {string} options.requiredRole - Expected healthcare professional role.
-   * @param {string} options.patientPseudoId - Target patient pseudo identifier.
+   * @param {string} options.patientUsername - Target patient username.
    * @param {Object} options.signaturePayload - Structured signature payload.
    * @param {string} options.signature - Detached signature provided by the client.
    * @param {string[]} options.requestedScopes - Requested clinical scopes.
@@ -117,7 +117,7 @@ class ClinicalRecordOrchestrationService {
   async resolveClinicalRegistrationContext({
     actor,
     requiredRole,
-    patientPseudoId,
+    patientUsername,
     signaturePayload,
     signature,
     requestedScopes,
@@ -133,13 +133,13 @@ class ClinicalRecordOrchestrationService {
       throw createAppError(`Only users with ${requiredRole} role can register this clinical event`, 403);
     }
 
-    const professionalId = actor.id || null;
-    if (!professionalId) {
-      throw createAppError('Authenticated professional id is required', 400);
+    const professionalUsername = actor.username || null;
+    if (!professionalUsername) {
+      throw createAppError('Authenticated professional username is required', 400);
     }
 
-    if (!patientPseudoId) {
-      throw createAppError('Missing required field: patientPseudoId', 400);
+    if (!patientUsername) {
+      throw createAppError('Missing required field: patientUsername', 400);
     }
 
     if (!signature) {
@@ -150,12 +150,20 @@ class ClinicalRecordOrchestrationService {
     await this.scopeCatalogService.assertActiveScopeIds(requestedScopes);
 
     // 3. Resolve patient and professional identities from trusted sources.
-    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
+    const patient = await this.identityRepository.findUserByUsername(patientUsername);
     if (!patient) {
       throw createAppError('Patient not found in identity repository', 404);
     }
+    if (this.getRoleName(patient) !== 'PATIENT') {
+      throw createAppError('Target user must have PATIENT role', 400);
+    }
 
-    const professional = await this.identityRepository.findUserById(professionalId);
+    const patientPseudoId = patient.pseudoId || null;
+    if (!patientPseudoId) {
+      throw createAppError('Target patient pseudoId is required', 400);
+    }
+
+    const professional = await this.identityRepository.findUserByUsername(professionalUsername);
     if (!professional) {
       throw createAppError('Authenticated professional not found in identity repository', 404);
     }
@@ -361,16 +369,24 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Only users with PATIENT role can retrieve their own history', 403);
     }
 
-    // 1.2 Resolve the patient pseudoId only from the authenticated actor
-    const patientPseudoId = actor.pseudoId || null;
-    if (!patientPseudoId) {
-      throw createAppError('Authenticated patient pseudoId is required', 400);
+    // 1.2 Resolve the patient identity from the authenticated username.
+    const patientUsername = actor.username || null;
+    if (!patientUsername) {
+      throw createAppError('Authenticated patient username is required', 400);
     }
 
     // 1.3 Resolve the patient identity from a trusted source
-    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
+    const patient = await this.identityRepository.findUserByUsername(patientUsername);
     if (!patient) {
       throw createAppError('Authenticated patient not found in identity repository', 404);
+    }
+    if (this.getRoleName(patient) !== 'PATIENT') {
+      throw createAppError('Authenticated user must have PATIENT role', 403);
+    }
+
+    const patientPseudoId = patient.pseudoId || null;
+    if (!patientPseudoId) {
+      throw createAppError('Authenticated patient pseudoId is required', 400);
     }
 
     // 2. Retrieve clinical references/indexes from the ledger for the patient
@@ -392,8 +408,7 @@ class ClinicalRecordOrchestrationService {
       status: 'success',
       action: 'get_patient_history',
       patient: {
-        pseudoId: patient.pseudoId || patientPseudoId,
-        username: patient.username || null,
+        username: patient.username || patientUsername,
       },
       totalRecords: records.length,
       records: records.map((record) => mapClinicalRecord(record, referenceMap.get(getRecordIdentifier(record)) || null)),
@@ -421,25 +436,33 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Only healthcare professionals can retrieve delegated history', 403);
     }
 
-    // 1.2 Resolve the authenticated professional only from the trusted actor context
-    const professionalId = actor.id || null;
-    if (!professionalId) {
-      throw createAppError('Authenticated professional id is required', 400);
+    // 1.2 Resolve the authenticated professional only from the trusted actor username.
+    const professionalUsername = actor.username || null;
+    if (!professionalUsername) {
+      throw createAppError('Authenticated professional username is required', 400);
     }
 
-    // 1.3 Validate the target patient identifier from the request payload
-    const patientPseudoId = payload?.patientPseudoId || null;
-    if (!patientPseudoId) {
-      throw createAppError('Missing required field: patientPseudoId', 400);
+    // 1.3 Validate the target patient username from the request payload.
+    const patientUsername = payload?.patientUsername || null;
+    if (!patientUsername) {
+      throw createAppError('Missing required field: patientUsername', 400);
     }
 
     // 1.4 Resolve patient and professional identities from trusted repositories
-    const patient = await this.identityRepository.findUserByPseudoId(patientPseudoId);
+    const patient = await this.identityRepository.findUserByUsername(patientUsername);
     if (!patient) {
       throw createAppError('Patient not found in identity repository', 404);
     }
+    if (this.getRoleName(patient) !== 'PATIENT') {
+      throw createAppError('Target user must have PATIENT role', 400);
+    }
 
-    const professional = await this.identityRepository.findUserById(professionalId);
+    const patientPseudoId = patient.pseudoId || null;
+    if (!patientPseudoId) {
+      throw createAppError('Target patient pseudoId is required', 400);
+    }
+
+    const professional = await this.identityRepository.findUserByUsername(professionalUsername);
     if (!professional) {
       throw createAppError('Authenticated professional not found in identity repository', 404);
     }
@@ -552,13 +575,11 @@ class ClinicalRecordOrchestrationService {
       status: 'success',
       action: 'get_professional_history',
       patient: {
-        pseudoId: patient.pseudoId || patientPseudoId,
-        username: patient.username || null,
+        username: patient.username || patientUsername,
       },
       professional: {
-        id: professional.id || professionalId,
         role: professionalRole,
-        username: professional.username || null,
+        username: professional.username || professionalUsername,
       },
       permission: readablePermissions.length === 1
         ? {
@@ -607,7 +628,7 @@ class ClinicalRecordOrchestrationService {
     const context = await this.resolveClinicalRegistrationContext({
       actor,
       requiredRole: 'DOCTOR',
-      patientPseudoId: payload.patientPseudoId,
+      patientUsername: payload.patientUsername,
       signaturePayload,
       signature: payload.signature,
       requestedScopes,
@@ -652,7 +673,7 @@ class ClinicalRecordOrchestrationService {
       message: 'Doctor consultation records registered successfully',
       status: 'success',
       action: 'register_doctor_consultation',
-      patientPseudoId: context.patientPseudoId,
+      patientUsername: context.patient.username,
       encounter: encounterRegistration.record,
       labOrder: labOrderRegistration ? labOrderRegistration.record : null,
       prescription: prescriptionRegistration ? prescriptionRegistration.record : null,
@@ -674,7 +695,7 @@ class ClinicalRecordOrchestrationService {
     const context = await this.resolveClinicalRegistrationContext({
       actor,
       requiredRole: 'LABORATORY',
-      patientPseudoId: payload.patientPseudoId,
+      patientUsername: payload.patientUsername,
       signaturePayload,
       signature: payload.signature,
       requestedScopes: [payload.scopeId],
@@ -714,6 +735,7 @@ class ClinicalRecordOrchestrationService {
       message: 'Laboratory result registered successfully',
       status: 'success',
       action: 'register_laboratory_result',
+      patientUsername: context.patient.username,
       record: registration.record,
     };
   }
@@ -733,7 +755,7 @@ class ClinicalRecordOrchestrationService {
     const context = await this.resolveClinicalRegistrationContext({
       actor,
       requiredRole: 'PHARMACIST',
-      patientPseudoId: payload.patientPseudoId,
+      patientUsername: payload.patientUsername,
       signaturePayload,
       signature: payload.signature,
       requestedScopes: [payload.scopeId],
@@ -773,6 +795,7 @@ class ClinicalRecordOrchestrationService {
       message: 'Pharmacy dispatch registered successfully',
       status: 'success',
       action: 'register_pharmacy_dispatch',
+      patientUsername: context.patient.username,
       record: registration.record,
     };
   }
@@ -791,6 +814,7 @@ class ClinicalRecordOrchestrationService {
     return {
       id: actor.id || null,
       pseudoId: actor.pseudoId || null,
+      username: actor.username || null,
       role: actor.role?.name || actor.role || null,
     };
   }

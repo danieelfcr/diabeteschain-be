@@ -1,7 +1,7 @@
 const { ensureNonEmptyString } = require('./user.dto.utils');
 
 /**
- * DTO for patient public key lookups by pseudo identifier.
+ * DTO for patient public key lookups by username.
  */
 class GetPatientPublicKeyDTO {
   /**
@@ -10,14 +10,14 @@ class GetPatientPublicKeyDTO {
    * @param {Object} payload - Raw route params.
    */
   constructor(payload = {}) {
-    this.pseudoId = payload.pseudoId;
+    this.username = payload.username;
   }
 
   /**
    * Validate and normalize the lookup payload.
    */
   validate() {
-    this.pseudoId = ensureNonEmptyString(this.pseudoId, 'pseudoId');
+    this.username = ensureNonEmptyString(this.username, 'username');
   }
 
   /**

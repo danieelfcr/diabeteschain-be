@@ -1,7 +1,7 @@
 const { ensureNonEmptyString } = require('./user.dto.utils');
 
 /**
- * DTO for professional public key lookups by internal id.
+ * DTO for professional public key lookups by username.
  */
 class GetUserPublicKeyDTO {
   /**
@@ -10,14 +10,14 @@ class GetUserPublicKeyDTO {
    * @param {Object} payload - Raw route params.
    */
   constructor(payload = {}) {
-    this.id = payload.id;
+    this.username = payload.username;
   }
 
   /**
    * Validate and normalize the lookup payload.
    */
   validate() {
-    this.id = ensureNonEmptyString(this.id, 'id');
+    this.username = ensureNonEmptyString(this.username, 'username');
   }
 
   /**

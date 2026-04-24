@@ -49,8 +49,8 @@ function normalizePermissionSignatureCollections({ allowedActions, allowedScopes
  * @returns {Object} Explicit signature payload.
  */
 function buildGrantAccessSignaturePayload({
-  patientPseudoId,
-  granteeId,
+  patientUsername,
+  professionalUsername,
   allowedActions,
   allowedScopes,
   validFrom,
@@ -58,8 +58,8 @@ function buildGrantAccessSignaturePayload({
 }) {
   return {
     action: 'GRANT_ACCESS',
-    patientPseudoId,
-    granteeId,
+    patientUsername,
+    professionalUsername,
     allowedActions,
     allowedScopes,
     validFrom,
@@ -73,11 +73,11 @@ function buildGrantAccessSignaturePayload({
  * @param {Object} input - Signature payload input.
  * @returns {Object} Explicit signature payload.
  */
-function buildRevokeAccessSignaturePayload({ patientPseudoId, granteeId }) {
+function buildRevokeAccessSignaturePayload({ patientUsername, professionalUsername }) {
   return {
     action: 'REVOKE_ACCESS',
-    patientPseudoId,
-    granteeId,
+    patientUsername,
+    professionalUsername,
   };
 }
 
@@ -90,7 +90,7 @@ function buildRevokeAccessSignaturePayload({ patientPseudoId, granteeId }) {
 function buildDoctorConsultationSignaturePayload(payload) {
   return {
     action: 'REGISTER_DOCTOR_CONSULTATION',
-    patientPseudoId: payload.patientPseudoId,
+    patientUsername: payload.patientUsername,
     encounter: buildSignatureRecordPayload(payload.encounter, 'ENCOUNTER'),
     labOrder: payload.labOrder
       ? buildSignatureRecordPayload(payload.labOrder, 'LAB_ORDER')
@@ -110,7 +110,7 @@ function buildDoctorConsultationSignaturePayload(payload) {
 function buildLaboratoryResultSignaturePayload(payload) {
   return {
     action: 'REGISTER_LABORATORY_RESULT',
-    patientPseudoId: payload.patientPseudoId,
+    patientUsername: payload.patientUsername,
     basedOn: payload.basedOn,
     scopeId: payload.scopeId,
     payloadMetadata: payload.payloadMetadata,
@@ -128,7 +128,7 @@ function buildLaboratoryResultSignaturePayload(payload) {
 function buildPharmacyDispatchSignaturePayload(payload) {
   return {
     action: 'REGISTER_PHARMACY_DISPATCH',
-    patientPseudoId: payload.patientPseudoId,
+    patientUsername: payload.patientUsername,
     basedOn: payload.basedOn,
     scopeId: payload.scopeId,
     payloadMetadata: payload.payloadMetadata,

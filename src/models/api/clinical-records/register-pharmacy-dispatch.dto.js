@@ -4,6 +4,7 @@ const {
   validateEncryption,
   validateIntegrity,
 } = require('./clinical-record-event.dto.utils');
+const { ensureNonEmptyString } = require('../user/user.dto.utils');
 
 /**
  * DTO for pharmacy dispatch registration.
@@ -15,7 +16,7 @@ class RegisterPharmacyDispatchDTO {
    * @param {Object} payload - Raw request payload.
    */
   constructor(payload = {}) {
-    this.patientPseudoId = payload.patientPseudoId;
+    this.patientUsername = payload.patientUsername;
     this.scopeId = payload.scopeId;
     this.basedOn = payload.basedOn;
     this.signature = payload.signature;
@@ -28,7 +29,8 @@ class RegisterPharmacyDispatchDTO {
    * Validate the minimum contract required by the flow.
    */
   validate() {
-    ensureRequired(this.patientPseudoId, 'patientPseudoId');
+    ensureRequired(this.patientUsername, 'patientUsername');
+    this.patientUsername = ensureNonEmptyString(this.patientUsername, 'patientUsername');
     ensureRequired(this.scopeId, 'scopeId');
     ensureRequired(this.basedOn, 'basedOn');
     ensureRequired(this.signature, 'signature');

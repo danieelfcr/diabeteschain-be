@@ -1,4 +1,5 @@
 const { createAppError } = require('../../../utils/app-error');
+const { ensureNonEmptyString } = require('../user/user.dto.utils');
 
 /**
  * Data transfer object for delegated professional history queries.
@@ -13,7 +14,7 @@ class GetProfessionalHistoryDTO {
    * @param {Object} payload - Request payload received from the client.
    */
   constructor(payload = {}) {
-    this.patientPseudoId = payload.patientPseudoId;
+    this.patientUsername = payload.patientUsername;
   }
 
   /**
@@ -22,9 +23,11 @@ class GetProfessionalHistoryDTO {
    * @throws {Error} When the required patient identifier is missing.
    */
   validate() {
-    if (!this.patientPseudoId) {
-      throw createAppError('Missing required field: patientPseudoId', 400);
+    if (!this.patientUsername) {
+      throw createAppError('Missing required field: patientUsername', 400);
     }
+
+    this.patientUsername = ensureNonEmptyString(this.patientUsername, 'patientUsername');
   }
 
   /**

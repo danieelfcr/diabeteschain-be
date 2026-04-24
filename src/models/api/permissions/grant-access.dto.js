@@ -5,6 +5,7 @@
  * use case before the request reaches the controller/service layer.
  */
 const { createAppError } = require('../../../utils/app-error');
+const { ensureNonEmptyString } = require('../user/user.dto.utils');
 
 function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
@@ -63,7 +64,7 @@ class GrantAccessDTO {
    * @param {Object} payload - Request payload received from the client.
    */
   constructor(payload = {}) {
-    this.professionalId = payload.professionalId;
+    this.professionalUsername = payload.professionalUsername;
     this.allowedScopes = payload.allowedScopes;
     this.allowedActions = payload.allowedActions;
     this.validFrom = payload.validFrom;
@@ -83,7 +84,7 @@ class GrantAccessDTO {
    */
   validate() {
     const requiredFields = [
-      'professionalId',
+      'professionalUsername',
       'allowedScopes',
       'allowedActions',
       'validFrom',
@@ -99,6 +100,10 @@ class GrantAccessDTO {
       }
     }
 
+    this.professionalUsername = ensureNonEmptyString(
+      this.professionalUsername,
+      'professionalUsername'
+    );
     this.capsuleByScope = normalizeCapsuleByScope(this.capsuleByScope);
 
     if (Array.isArray(this.allowedScopes)) {

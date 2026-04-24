@@ -1,4 +1,5 @@
 const { validateClinicalRecordInput, ensureRequired } = require('./clinical-record-event.dto.utils');
+const { ensureNonEmptyString } = require('../user/user.dto.utils');
 
 /**
  * DTO for the doctor consultation registration flow.
@@ -10,7 +11,7 @@ class RegisterDoctorConsultationDTO {
    * @param {Object} payload - Raw request payload.
    */
   constructor(payload = {}) {
-    this.patientPseudoId = payload.patientPseudoId;
+    this.patientUsername = payload.patientUsername;
     this.signature = payload.signature;
     this.encounter = payload.encounter;
     this.labOrder = payload.labOrder;
@@ -21,7 +22,8 @@ class RegisterDoctorConsultationDTO {
    * Validate the minimum contract required by the flow.
    */
   validate() {
-    ensureRequired(this.patientPseudoId, 'patientPseudoId');
+    ensureRequired(this.patientUsername, 'patientUsername');
+    this.patientUsername = ensureNonEmptyString(this.patientUsername, 'patientUsername');
     ensureRequired(this.signature, 'signature');
 
     this.encounter = validateClinicalRecordInput(this.encounter, 'encounter');
