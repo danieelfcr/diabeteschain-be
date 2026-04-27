@@ -6,6 +6,7 @@ const identityRoutes = require('./routes/identity.routes');
 const permissionRoutes = require('./routes/permission.routes');
 const scopeRoutes = require('./routes/scope.routes');
 const errorMiddleware = require('./middlewares/error.middleware');
+const requestLogger = require('./middlewares/requestLogger.middleware');
 
 /**
  * Express application instance configured with the project's HTTP routes and
@@ -17,6 +18,9 @@ const errorMiddleware = require('./middlewares/error.middleware');
  * @type {import('express').Express}
  */
 const app = express();
+
+// Log every request once the response finishes so the final status is included.
+app.use(requestLogger);
 
 // Parse JSON payloads before requests reach the domain routes.
 app.use(express.json());
