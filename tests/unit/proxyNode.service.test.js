@@ -1,12 +1,16 @@
 jest.mock('../../src/repositories/proxyNode.repository', () => ({
   findAvailable: jest.fn(),
   findByIds: jest.fn(),
+  upsert: jest.fn(),
 }));
 
 const crypto = require('crypto');
 const proxyNodeRepository = require('../../src/repositories/proxyNode.repository');
 const ProxyNodeService = require('../../src/services/infrastructure/proxyNode.service');
-const { encryptProxyNodeBaseUrl } = require('../../src/utils/proxyNodeCrypto.utils');
+const {
+  encryptProxyNodeBaseUrl,
+  decryptProxyNodeBaseUrl,
+} = require('../../src/utils/proxyNodeCrypto.utils');
 
 describe('ProxyNodeService', () => {
   const proxyNode = (id, baseUrl, status = 'ACTIVE') => ({
@@ -85,5 +89,26 @@ describe('ProxyNodeService', () => {
     const selected = await service.selectProxyNodesForGrant();
 
     expect(selected.map((node) => node.id)).toEqual(['proxy-a', 'proxy-b']);
+  });
+
+  it('seeds the localhost PRE proxy with an encrypted base URL', async () => {
+    proxyNodeRepository.upsert.mockResolvedValue(null);
+
+    const service = new ProxyNodeService();
+    const seededCount = await service.seedDefaultProxyNodes();
+
+    expect(seededCount).toBe(1);
+    expect(proxyNodeRepository.upsert).toHaveBeenCalledTimes(1);
+
+    const persistedProxyNode = proxyNodeRepository.upsert.mock.calls[0][0];
+
+    expect(persistedProxyNode).toMatchObject({
+      id: '00000000-0000-4000-8000-000000004100',
+      status: 'ACTIVE',
+    });
+    expect(persistedProxyNode.encryptedBaseUrl).toEqual(expect.any(String));
+    expect(persistedProxyNode.encryptedBaseUrl).not.toContain('localhost');
+    expect(decryptProxyNodeBaseUrl(persistedProxyNode.encryptedBaseUrl))
+      .toBe('http://localhost:4100/');
   });
 });

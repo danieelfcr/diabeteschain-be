@@ -1,6 +1,10 @@
 const proxyNodeRepository = require('../../repositories/proxyNode.repository');
+const { DEFAULT_PROXY_NODES } = require('../../constants/proxyNode.constants');
 const { createAppError } = require('../../utils/app-error');
-const { decryptProxyNodeBaseUrl } = require('../../utils/proxyNodeCrypto.utils');
+const {
+  encryptProxyNodeBaseUrl,
+  decryptProxyNodeBaseUrl,
+} = require('../../utils/proxyNodeCrypto.utils');
 
 /**
  * Service responsible for resolving real PRE proxy nodes from the
@@ -10,6 +14,26 @@ const { decryptProxyNodeBaseUrl } = require('../../utils/proxyNodeCrypto.utils')
  * on transport to already resolved endpoints.
  */
 class ProxyNodeService {
+  /**
+   * Seed default PRE proxy nodes for the local infrastructure database.
+   *
+   * @returns {Promise<number>} Number of seeded proxy nodes.
+   */
+  async seedDefaultProxyNodes() {
+    let seededCount = 0;
+
+    for (const entry of DEFAULT_PROXY_NODES) {
+      await proxyNodeRepository.upsert({
+        id: entry.id,
+        encryptedBaseUrl: encryptProxyNodeBaseUrl(entry.baseUrl),
+        status: entry.status,
+      });
+      seededCount += 1;
+    }
+
+    return seededCount;
+  }
+
   /**
    * List all active proxy nodes in normalized response shape.
    *
