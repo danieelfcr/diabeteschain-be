@@ -11,9 +11,6 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
     getProfessionalHistory(req, res) {
       return res.status(200).json({ authenticatedUser: req.user });
     },
-    getScopeMaterialAccess(req, res) {
-      return res.status(200).json({ authenticatedUser: req.user });
-    },
     registerDoctorConsultation(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },

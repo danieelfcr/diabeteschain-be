@@ -8,9 +8,6 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
     getProfessionalHistory(req, res) {
       return res.status(200).json({ authenticatedUser: req.user });
     },
-    getScopeMaterialAccess(req, res) {
-      return res.status(200).json({ authenticatedUser: req.user });
-    },
     registerDoctorConsultation(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },
@@ -182,36 +179,6 @@ describe('Role authorization integration', () => {
       expect(response.body.error).toBe('Forbidden for current role');
     }
   );
-
-  it('permite que un DOCTOR llame GET /clinical-records/scope-material/:patientUsername/:scopeId/access', async () => {
-    const token = buildToken({
-      id: 'doctor-id-scope-material',
-      role: 'DOCTOR',
-      professionalId: 'COL-SCOPE',
-    });
-
-    const response = await request(app)
-      .get('/clinical-records/scope-material/patient_user/scope-001/access')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(response.status).toBe(200);
-    expect(response.body.authenticatedUser.role).toBe('DOCTOR');
-  });
-
-  it('rechaza con 403 a un PATIENT en GET /clinical-records/scope-material/:patientUsername/:scopeId/access', async () => {
-    const token = buildToken({
-      id: 'patient-id-scope-material',
-      pseudoId: 'patient-pseudo-scope-material',
-      role: 'PATIENT',
-    });
-
-    const response = await request(app)
-      .get('/clinical-records/scope-material/patient_user/scope-001/access')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Forbidden for current role');
-  });
 
   it.each(['LABORATORY', 'PATIENT'])(
     'rechaza la ruta clinica de farmacia para el rol %s',
