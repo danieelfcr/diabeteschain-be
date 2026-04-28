@@ -8,6 +8,9 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
     getProfessionalHistory(req, res) {
       return res.status(200).json({ authenticatedUser: req.user });
     },
+    getScopeMaterialAccess(req, res) {
+      return res.status(200).json({ authenticatedUser: req.user });
+    },
     registerDoctorConsultation(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },
@@ -22,6 +25,9 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
 
 jest.mock('../../src/controllers/permission.controller', () =>
   jest.fn().mockImplementation(() => ({
+    getScopeMaterialPreflight(req, res) {
+      return res.status(200).json({ authenticatedUser: req.user });
+    },
     grantAccess(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },
@@ -51,10 +57,12 @@ const buildGrantPayload = () => ({
   validFrom: '2026-01-01T00:00:00.000Z',
   validTo: '2026-12-31T23:59:59.000Z',
   signature: 'grant-signature',
-  kfrags: ['kfrag-001'],
-  capsuleByScope: {
-    '8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2': 'base64-scope-capsule',
-  },
+  transformKeys: [
+    {
+      scopeId: '8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2',
+      transformKey: 'transform-key-001',
+    },
+  ],
 });
 
 const buildClinicalPayload = () => ({
@@ -108,6 +116,38 @@ describe('Role authorization integration', () => {
     expect(response.body.error).toBe('Forbidden for current role');
   });
 
+  it('permite que un PATIENT llame POST /permissions/scope-materials/preflight', async () => {
+    const token = buildToken({
+      id: 'patient-id-preflight',
+      pseudoId: 'patient-pseudo-preflight',
+      role: 'PATIENT',
+    });
+
+    const response = await request(app)
+      .post('/permissions/scope-materials/preflight')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scopeIds: ['scope-001'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.authenticatedUser.role).toBe('PATIENT');
+  });
+
+  it('rechaza con 403 a un DOCTOR en POST /permissions/scope-materials/preflight', async () => {
+    const token = buildToken({
+      id: 'doctor-id-preflight',
+      role: 'DOCTOR',
+      professionalId: 'COL-PREFLIGHT',
+    });
+
+    const response = await request(app)
+      .post('/permissions/scope-materials/preflight')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scopeIds: ['scope-001'] });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Forbidden for current role');
+  });
+
   it('rechaza con 403 un token valido con rol incorrecto en una ruta protegida por rol', async () => {
     const token = buildToken({
       id: 'doctor-id-002',
@@ -142,6 +182,36 @@ describe('Role authorization integration', () => {
       expect(response.body.error).toBe('Forbidden for current role');
     }
   );
+
+  it('permite que un DOCTOR llame GET /clinical-records/scope-material/:patientUsername/:scopeId/access', async () => {
+    const token = buildToken({
+      id: 'doctor-id-scope-material',
+      role: 'DOCTOR',
+      professionalId: 'COL-SCOPE',
+    });
+
+    const response = await request(app)
+      .get('/clinical-records/scope-material/patient_user/scope-001/access')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.authenticatedUser.role).toBe('DOCTOR');
+  });
+
+  it('rechaza con 403 a un PATIENT en GET /clinical-records/scope-material/:patientUsername/:scopeId/access', async () => {
+    const token = buildToken({
+      id: 'patient-id-scope-material',
+      pseudoId: 'patient-pseudo-scope-material',
+      role: 'PATIENT',
+    });
+
+    const response = await request(app)
+      .get('/clinical-records/scope-material/patient_user/scope-001/access')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Forbidden for current role');
+  });
 
   it.each(['LABORATORY', 'PATIENT'])(
     'rechaza la ruta clinica de farmacia para el rol %s',

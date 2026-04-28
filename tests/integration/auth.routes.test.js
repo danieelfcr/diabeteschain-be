@@ -11,6 +11,9 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
     getProfessionalHistory(req, res) {
       return res.status(200).json({ authenticatedUser: req.user });
     },
+    getScopeMaterialAccess(req, res) {
+      return res.status(200).json({ authenticatedUser: req.user });
+    },
     registerDoctorConsultation(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },
@@ -25,6 +28,9 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
 
 jest.mock('../../src/controllers/permission.controller', () =>
   jest.fn().mockImplementation(() => ({
+    getScopeMaterialPreflight(req, res) {
+      return res.status(200).json({ authenticatedUser: req.user });
+    },
     grantAccess(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },
