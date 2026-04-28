@@ -84,6 +84,9 @@ function normalizeScopeMaterials(scopeMaterials = []) {
               || entry.scopeMaterial.enc_k_scope
               || entry.scopeMaterial.encKScope
               || null,
+            encryptedScopeKeyEncoding: entry.scopeMaterial.encryptedScopeKeyEncoding
+              || entry.scopeMaterial.metadata?.encryptedScopeKeyEncoding
+              || null,
             proxyIds: normalizeArray(entry.scopeMaterial.proxyIds),
             version: entry.scopeMaterial.version || null,
             status: entry.scopeMaterial.status || null,
@@ -112,6 +115,7 @@ function normalizeScopeMaterial(material) {
     patientPseudoId: material.patientPseudoId || material.patientId || null,
     scopeId: material.scopeId || null,
     encryptedScopeKey: material.encryptedScopeKey || material.enc_k_scope || material.encKScope || null,
+    encryptedScopeKeyEncoding: material.encryptedScopeKeyEncoding || material.metadata?.encryptedScopeKeyEncoding || null,
     proxyIds: normalizeArray(material.proxyIds),
     version: material.version || null,
     status: material.status || null,

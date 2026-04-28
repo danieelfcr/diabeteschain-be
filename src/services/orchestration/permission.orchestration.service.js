@@ -463,6 +463,7 @@ class PermissionOrchestrationService {
         exists,
         scopeMaterialId: exists ? material.scopeMaterialId || null : null,
         encryptedScopeKey: exists ? material.encryptedScopeKey : null,
+        encryptedScopeKeyEncoding: exists ? material.encryptedScopeKeyEncoding || null : null,
         proxyIds: exists ? material.proxyIds || [] : [],
         status: exists ? material.status || 'ACTIVE' : null,
         version: exists ? material.version || null : null,
@@ -618,11 +619,23 @@ class PermissionOrchestrationService {
           );
         }
 
+        if (
+          typeof existingScopeMaterial.encryptedScopeKeyEncoding !== 'string'
+          || existingScopeMaterial.encryptedScopeKeyEncoding.trim() === ''
+        ) {
+          throw createAppError(
+            `ScopeMaterial for scope ${scopeId} is missing encryptedScopeKeyEncoding`,
+            409,
+            'scope_material_missing_encoding'
+          );
+        }
+
         resultByScope.set(scopeId, {
           scopeId,
           scopeMaterialId: existingScopeMaterial.scopeMaterialId,
           created: false,
           proxyIds: existingScopeMaterial.proxyIds,
+          encryptedScopeKeyEncoding: existingScopeMaterial.encryptedScopeKeyEncoding,
           status: existingScopeMaterial.status || 'ACTIVE',
         });
         continue;
@@ -640,6 +653,23 @@ class PermissionOrchestrationService {
     if (scopesWithoutMaterial.length > 0) {
       throw createAppError(
         `scopeMaterials.encryptedScopeKey is required for scopes without ScopeMaterial: ${scopesWithoutMaterial.join(', ')}`,
+        400
+      );
+    }
+
+    // ============================================================================================== //
+
+    const scopesWithoutMaterialEncoding = allowedScopes
+      .filter((scopeId) => !resultByScope.has(scopeId))
+      .filter((scopeId) => {
+        const material = materialByScope.get(scopeId);
+        return typeof material?.encryptedScopeKeyEncoding !== 'string'
+          || material.encryptedScopeKeyEncoding.trim() === '';
+      });
+
+    if (scopesWithoutMaterialEncoding.length > 0) {
+      throw createAppError(
+        `scopeMaterials.encryptedScopeKeyEncoding is required for scopes without ScopeMaterial: ${scopesWithoutMaterialEncoding.join(', ')}`,
         400
       );
     }
@@ -670,6 +700,7 @@ class PermissionOrchestrationService {
           ...(requestMaterial.metadata || {}),
           scheme: requestMaterial.metadata?.scheme || 'RECRYPT',
           source: requestMaterial.metadata?.source || 'PATIENT_GRANT',
+          encryptedScopeKeyEncoding: requestMaterial.encryptedScopeKeyEncoding,
           recryptMetadata: requestMaterial.recryptMetadata || requestMaterial.metadata?.recryptMetadata || {},
           createdBy: patientPseudoId,
         },
@@ -685,6 +716,8 @@ class PermissionOrchestrationService {
         proxyIds: createdScopeMaterial?.proxyIds?.length
           ? createdScopeMaterial.proxyIds
           : normalizedProxyIds,
+        encryptedScopeKeyEncoding: createdScopeMaterial?.encryptedScopeKeyEncoding
+          || requestMaterial.encryptedScopeKeyEncoding,
         status: createdScopeMaterial?.status || 'ACTIVE',
         txId: created?.txId || null,
       });
@@ -712,6 +745,16 @@ class PermissionOrchestrationService {
 
     if (missingScopes.length > 0) {
       throw createAppError('A transformKey is required for each allowed scope', 400);
+    }
+
+    for (const entry of transformKeys) {
+      if (typeof entry?.transformKey !== 'string' || entry.transformKey.trim() === '') {
+        throw createAppError('transformKey must be a non-empty string', 400);
+      }
+
+      if (typeof entry?.transformKeyEncoding !== 'string' || entry.transformKeyEncoding.trim() === '') {
+        throw createAppError('transformKeyEncoding is required', 400);
+      }
     }
   }
 

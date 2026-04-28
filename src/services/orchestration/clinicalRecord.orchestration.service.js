@@ -684,6 +684,7 @@ class ClinicalRecordOrchestrationService {
         granteeId: professional.id,
         scopeId,
         encryptedScopeKey: scopeMaterial.encryptedScopeKey,
+        encryptedScopeKeyEncoding: scopeMaterial.encryptedScopeKeyEncoding,
         proxyIds: scopeMaterial.proxyIds,
       });
 
@@ -981,6 +982,7 @@ class ClinicalRecordOrchestrationService {
    * @param {string} input.granteeId - Professional identifier.
    * @param {string} input.scopeId - Scope identifier.
    * @param {string} input.encryptedScopeKey - Patient-owned encrypted scope key.
+   * @param {string} input.encryptedScopeKeyEncoding - Serialized scope key encoding.
    * @param {string[]} input.proxyIds - Proxy ids stored in ScopeMaterial.
    * @returns {Promise<Object>} Transformed key material.
    */
@@ -990,12 +992,17 @@ class ClinicalRecordOrchestrationService {
     granteeId,
     scopeId,
     encryptedScopeKey,
+    encryptedScopeKeyEncoding,
     proxyIds = [],
   }) {
     const normalizedProxyIds = [...new Set((Array.isArray(proxyIds) ? proxyIds : []).filter(Boolean))];
 
     if (normalizedProxyIds.length === 0) {
       throw createAppError(`ScopeMaterial for scope ${scopeId} is missing PRE proxy identifiers`, 409);
+    }
+
+    if (typeof encryptedScopeKeyEncoding !== 'string' || encryptedScopeKeyEncoding.trim() === '') {
+      throw createAppError(`ScopeMaterial for scope ${scopeId} is missing encryptedScopeKeyEncoding`, 409);
     }
 
     const proxyNodes = await this.proxyNodeService.getProxyNodesByIds(normalizedProxyIds);
@@ -1011,6 +1018,7 @@ class ClinicalRecordOrchestrationService {
           granteeId,
           scopeId,
           encryptedScopeKey,
+          encryptedScopeKeyEncoding,
         });
       } catch (error) {
         failures.push({
