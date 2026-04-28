@@ -4,6 +4,7 @@ const FabricPermissionRepository = require('../../repositories/fabricPermission.
 const FabricClinicalRecordRepository = require('../../repositories/fabricClinicalRecord.repository');
 const PreServiceClient = require('../../clients/preServiceClient');
 const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
+const ProxyNodeService = require('../infrastructure/proxyNode.service');
 const { validatePermissionDates, validateActionsAndScopes } = require('../../utils/permission.utils');
 const {
   buildGrantAccessSignaturePayload,
@@ -26,6 +27,7 @@ class PermissionOrchestrationService {
     this.fabricClinicalRecordRepository = new FabricClinicalRecordRepository();
     this.preServiceClient = new PreServiceClient();
     this.scopeCatalogService = new ScopeCatalogService();
+    this.proxyNodeService = new ProxyNodeService();
   }
 
   /**
@@ -135,16 +137,23 @@ class PermissionOrchestrationService {
 
     // ============================================================================================== //
 
-    // 3. Ensure patient-owned scope keys exist before granting delegated access.
+    // 3. Resolve the PRE proxy nodes controlled by the backend for this grant.
+    const selectedProxyNodes = await this.proxyNodeService.selectProxyNodesForGrant();
+    const selectedProxyIds = selectedProxyNodes.map((node) => node.id);
+
+    // ============================================================================================== //
+
+    // 4. Ensure patient-owned scope keys exist before granting delegated access.
     const scopeMaterials = await this.ensureScopeMaterialsForGrant({
       patientPseudoId,
       allowedScopes,
       scopeMaterials: payload.scopeMaterials,
+      proxyIds: selectedProxyIds,
     });
 
     // ============================================================================================== //
 
-    // 4. Create permission record in FabricPermission Repository.
+    // 5. Create permission record in FabricPermission Repository.
     const permissionResult = await this.fabricPermissionRepository.grantAccess({
       permissionId: payload.permissionId || undefined,
       patientPseudoId,
@@ -166,26 +175,36 @@ class PermissionOrchestrationService {
 
     // ============================================================================================== //
 
-    // 5. Register one transform key per authorized scope in the PRE service.
-    const transformKeysRegistered = await Promise.all(
-      payload.transformKeys.map((entry) => this.preServiceClient.registerTransformKey({
-        permissionId,
-        patientPseudoId,
-        granteeId: grantee.id,
-        scopeId: entry.scopeId,
-        transformKey: entry.transformKey,
-        transformKeyEncoding: entry.transformKeyEncoding,
-        proxyNodeId: entry.proxyNodeId,
-        validFrom,
-        validTo,
-        metadata: {
-          ...(entry.metadata || {}),
-          granteeRole,
-          createdBy: patientPseudoId,
-        },
-        status: 'ACTIVE',
-      }))
-    );
+    // 6. Register one transform key per authorized scope in every selected PRE proxy.
+    const scopeMaterialByScope = new Map(scopeMaterials.map((material) => [material.scopeId, material]));
+    const transformKeysRegistered = (await Promise.all(
+      payload.transformKeys.map(async (entry) => {
+        const scopeMaterial = scopeMaterialByScope.get(entry.scopeId);
+        const proxyNodes = await this.resolveProxyNodesForScope(
+          scopeMaterial?.proxyIds || selectedProxyIds,
+          selectedProxyNodes
+        );
+
+        return Promise.all(proxyNodes.map((proxyNode) => this.preServiceClient.registerTransformKey({
+          baseUrl: proxyNode.endpointUrl,
+          permissionId,
+          patientPseudoId,
+          granteeId: grantee.id,
+          scopeId: entry.scopeId,
+          transformKey: entry.transformKey,
+          transformKeyEncoding: entry.transformKeyEncoding,
+          proxyNodeId: proxyNode.id,
+          validFrom,
+          validTo,
+          metadata: {
+            ...(entry.metadata || {}),
+            granteeRole,
+            createdBy: patientPseudoId,
+          },
+          status: 'ACTIVE',
+        })));
+      })
+    )).flat();
 
     // ============================================================================================== //
   
@@ -308,6 +327,15 @@ class PermissionOrchestrationService {
 
     // ============================================================================================== //
 
+    const revocationTargets = await Promise.all(
+      revokedScopes.map(async (scopeId) => ({
+        scopeId,
+        proxyNodes: await this.resolveProxyNodesForScopeMaterial(patientPseudoId, scopeId),
+      }))
+    );
+
+    // ============================================================================================== //
+
     // 4. Revoke the active permission in Fabric and deactivate transform keys.
     const revocation = await this.fabricPermissionRepository.revokeAccess({
       permissionId,
@@ -317,14 +345,18 @@ class PermissionOrchestrationService {
       signature: payload.signature,
     });
 
-    const transformKeyRevocations = await Promise.all(
-      revokedScopes.map((scopeId) => this.preServiceClient.revokeTransformKey({
-        permissionId,
-        patientPseudoId,
-        granteeId: grantee.id,
-        scopeId,
-      }))
-    );
+    const transformKeyRevocations = (await Promise.all(
+      revocationTargets.map((target) => Promise.all(
+        target.proxyNodes.map((proxyNode) => this.preServiceClient.revokeTransformKey({
+          baseUrl: proxyNode.endpointUrl,
+          permissionId,
+          patientPseudoId,
+          granteeId: grantee.id,
+          scopeId: target.scopeId,
+          proxyNodeId: proxyNode.id,
+        }))
+      ))
+    )).flat();
 
     // ============================================================================================== //
 
@@ -431,6 +463,7 @@ class PermissionOrchestrationService {
         exists,
         scopeMaterialId: exists ? material.scopeMaterialId || null : null,
         encryptedScopeKey: exists ? material.encryptedScopeKey : null,
+        proxyIds: exists ? material.proxyIds || [] : [],
         status: exists ? material.status || 'ACTIVE' : null,
         version: exists ? material.version || null : null,
         createdAt: exists ? material.createdAt || null : null,
@@ -462,6 +495,55 @@ class PermissionOrchestrationService {
   }
 
   /**
+   * Resolve proxy nodes from persisted ScopeMaterial proxy identifiers.
+   *
+   * @param {string} patientPseudoId - Patient pseudo identifier.
+   * @param {string} scopeId - Scope identifier.
+   * @returns {Promise<Array<Object>>} Resolved proxy nodes in stored order.
+   */
+  async resolveProxyNodesForScopeMaterial(patientPseudoId, scopeId) {
+    const scopeMaterial = normalizeScopeMaterial(
+      await this.fabricClinicalRecordRepository.getScopeMaterialByPatientAndScope(
+        patientPseudoId,
+        scopeId
+      )
+    );
+
+    if (!scopeMaterial?.encryptedScopeKey) {
+      throw createAppError(`No active ScopeMaterial found for scope ${scopeId}`, 403);
+    }
+
+    return this.resolveProxyNodesForScope(scopeMaterial.proxyIds);
+  }
+
+  /**
+   * Resolve proxy node identifiers while reusing already selected nodes when possible.
+   *
+   * @param {string[]} proxyIds - Proxy node identifiers.
+   * @param {Array<Object>} knownProxyNodes - Already resolved nodes.
+   * @returns {Promise<Array<Object>>} Resolved proxy nodes in input order.
+   */
+  async resolveProxyNodesForScope(proxyIds = [], knownProxyNodes = []) {
+    const normalizedProxyIds = [...new Set((Array.isArray(proxyIds) ? proxyIds : []).filter(Boolean))];
+
+    if (normalizedProxyIds.length === 0) {
+      throw createAppError('ScopeMaterial is missing PRE proxy identifiers', 409, 'scope_material_missing_proxy_ids');
+    }
+
+    const knownNodeMap = new Map(
+      knownProxyNodes
+        .filter((node) => node?.id)
+        .map((node) => [node.id, node])
+    );
+
+    if (normalizedProxyIds.every((proxyId) => knownNodeMap.has(proxyId))) {
+      return normalizedProxyIds.map((proxyId) => knownNodeMap.get(proxyId));
+    }
+
+    return this.proxyNodeService.getProxyNodesByIds(normalizedProxyIds);
+  }
+
+  /**
    * Ensure every granted scope has an active patient-owned ScopeMaterial.
    *
    * Missing scope material must be supplied by the patient as encrypted scope
@@ -472,9 +554,21 @@ class PermissionOrchestrationService {
    * @param {string} input.patientPseudoId - Patient pseudo identifier.
    * @param {string[]} input.allowedScopes - Scopes being granted.
    * @param {Array<Object>} input.scopeMaterials - Patient-supplied material.
+   * @param {string[]} input.proxyIds - Backend-selected proxy node identifiers.
    * @returns {Promise<Array<Object>>} Scope material status per granted scope.
    */
-  async ensureScopeMaterialsForGrant({ patientPseudoId, allowedScopes = [], scopeMaterials = [] }) {
+  async ensureScopeMaterialsForGrant({
+    patientPseudoId,
+    allowedScopes = [],
+    scopeMaterials = [],
+    proxyIds = [],
+  }) {
+    const normalizedProxyIds = [...new Set((Array.isArray(proxyIds) ? proxyIds : []).filter(Boolean))];
+
+    if (normalizedProxyIds.length === 0) {
+      throw createAppError('At least one PRE proxy node is required for ScopeMaterial', 503);
+    }
+
     // 1. Build a lookup table for the patient-supplied scope material.
     const materialByScope = new Map();
 
@@ -516,10 +610,19 @@ class PermissionOrchestrationService {
 
       // 3.2 Reuse existing patient-owned material when an encrypted scope key is already present.
       if (existingScopeMaterial?.encryptedScopeKey) {
+        if (!existingScopeMaterial.proxyIds || existingScopeMaterial.proxyIds.length === 0) {
+          throw createAppError(
+            `ScopeMaterial for scope ${scopeId} is missing PRE proxy identifiers`,
+            409,
+            'scope_material_missing_proxy_ids'
+          );
+        }
+
         resultByScope.set(scopeId, {
           scopeId,
           scopeMaterialId: existingScopeMaterial.scopeMaterialId,
           created: false,
+          proxyIds: existingScopeMaterial.proxyIds,
           status: existingScopeMaterial.status || 'ACTIVE',
         });
         continue;
@@ -558,6 +661,7 @@ class PermissionOrchestrationService {
         patientPseudoId,
         scopeId,
         encryptedScopeKey: requestMaterial.encryptedScopeKey,
+        proxyIds: normalizedProxyIds,
         status: 'ACTIVE',
         createdAt: now,
         updatedAt: now,
@@ -578,6 +682,9 @@ class PermissionOrchestrationService {
         scopeId,
         scopeMaterialId: createdScopeMaterial?.scopeMaterialId || null,
         created: true,
+        proxyIds: createdScopeMaterial?.proxyIds?.length
+          ? createdScopeMaterial.proxyIds
+          : normalizedProxyIds,
         status: createdScopeMaterial?.status || 'ACTIVE',
         txId: created?.txId || null,
       });

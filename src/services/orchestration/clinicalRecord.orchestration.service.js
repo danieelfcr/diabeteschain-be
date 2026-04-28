@@ -5,6 +5,7 @@ const FabricPermissionRepository = require('../../repositories/fabricPermission.
 const IdentityRepository = require('../../repositories/identity.repository');
 const PreServiceClient = require('../../clients/preServiceClient');
 const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
+const ProxyNodeService = require('../infrastructure/proxyNode.service');
 const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
 const { createAppError } = require('../../utils/app-error');
 const {
@@ -44,6 +45,7 @@ class ClinicalRecordOrchestrationService {
     this.identityRepository = new IdentityRepository();
     this.preServiceClient = new PreServiceClient();
     this.scopeCatalogService = new ScopeCatalogService();
+    this.proxyNodeService = new ProxyNodeService();
   }
 
   /**
@@ -676,12 +678,13 @@ class ClinicalRecordOrchestrationService {
         throw createAppError(`No active permission found for scope ${scopeId}`, 403);
       }
 
-      const transformedMaterial = await this.preServiceClient.transformScopeKey({
+      const transformedMaterial = await this.transformScopeKeyWithProxyFallback({
         permissionId: permissionForScope.permissionId,
         patientPseudoId,
         granteeId: professional.id,
         scopeId,
         encryptedScopeKey: scopeMaterial.encryptedScopeKey,
+        proxyIds: scopeMaterial.proxyIds,
       });
 
       return {
@@ -970,6 +973,63 @@ class ClinicalRecordOrchestrationService {
   }
 
   /**
+   * Transform one encrypted scope key using the ScopeMaterial proxyIds in order.
+   *
+   * @param {Object} input - Transform input.
+   * @param {string} input.permissionId - Permission identifier.
+   * @param {string} input.patientPseudoId - Patient pseudo identifier.
+   * @param {string} input.granteeId - Professional identifier.
+   * @param {string} input.scopeId - Scope identifier.
+   * @param {string} input.encryptedScopeKey - Patient-owned encrypted scope key.
+   * @param {string[]} input.proxyIds - Proxy ids stored in ScopeMaterial.
+   * @returns {Promise<Object>} Transformed key material.
+   */
+  async transformScopeKeyWithProxyFallback({
+    permissionId,
+    patientPseudoId,
+    granteeId,
+    scopeId,
+    encryptedScopeKey,
+    proxyIds = [],
+  }) {
+    const normalizedProxyIds = [...new Set((Array.isArray(proxyIds) ? proxyIds : []).filter(Boolean))];
+
+    if (normalizedProxyIds.length === 0) {
+      throw createAppError(`ScopeMaterial for scope ${scopeId} is missing PRE proxy identifiers`, 409);
+    }
+
+    const proxyNodes = await this.proxyNodeService.getProxyNodesByIds(normalizedProxyIds);
+    const failures = [];
+
+    for (const proxyNode of proxyNodes) {
+      try {
+        return await this.preServiceClient.transformScopeKey({
+          baseUrl: proxyNode.endpointUrl,
+          proxyNodeId: proxyNode.id,
+          permissionId,
+          patientPseudoId,
+          granteeId,
+          scopeId,
+          encryptedScopeKey,
+        });
+      } catch (error) {
+        failures.push({
+          proxyNodeId: proxyNode.id,
+          message: error.message,
+        });
+      }
+    }
+
+    const error = createAppError(
+      `Unable to transform scope key for scope ${scopeId} using any assigned PRE proxy`,
+      503,
+      'pre_proxy_fallback_exhausted'
+    );
+    error.details = failures;
+    throw error;
+  }
+
+  /**
    * Build a lookup of active scope material by scopeId.
    *
    * @param {Array<Object>} scopeMaterials - Scope material entries.
@@ -1024,6 +1084,7 @@ class ClinicalRecordOrchestrationService {
       patientPseudoId: normalized.patientPseudoId,
       scopeId: normalized.scopeId,
       encryptedScopeKey: normalized.encryptedScopeKey,
+      proxyIds: normalized.proxyIds,
       status: normalized.status,
       version: normalized.version,
       createdAt: normalized.createdAt,

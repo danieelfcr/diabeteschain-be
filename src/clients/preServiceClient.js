@@ -2,7 +2,6 @@ const { createAppError } = require('../utils/app-error');
 
 class PreServiceClient {
   constructor(options = {}) {
-    this.baseUrl = options.baseUrl || process.env.PRE_SERVICE_BASE_URL || null;
     this.apiKey = options.apiKey || process.env.PRE_SERVICE_API_KEY || process.env.PRE_API_KEY || null;
     this.timeoutMs = this.normalizeTimeout(
       options.timeoutMs || process.env.PRE_SERVICE_TIMEOUT_MS || 5000
@@ -29,6 +28,7 @@ class PreServiceClient {
         },
       },
       errorMessage: 'Unable to register transform key in PRE service',
+      baseUrl: payload.baseUrl,
     });
 
     return {
@@ -49,6 +49,7 @@ class PreServiceClient {
         scopeId: payload.scopeId,
       },
       errorMessage: 'Unable to revoke transform key in PRE service',
+      baseUrl: payload.baseUrl,
     });
 
     return {
@@ -71,6 +72,7 @@ class PreServiceClient {
         encryptedKeyEncoding: payload.encryptedScopeKeyEncoding || 'base64',
       },
       errorMessage: 'Unable to transform scope key in PRE service',
+      baseUrl: payload.baseUrl,
     });
 
     const transformedScopeKey = response?.transformedScopeKey || response?.transformedKey || null;
@@ -86,19 +88,24 @@ class PreServiceClient {
       scopeId: payload.scopeId,
       transformedScopeKey,
       metadata: {
-        proxyNodeId: response?.proxyNodeId || response?.proxyId || null,
+        proxyNodeId: payload.proxyNodeId || response?.proxyNodeId || response?.proxyId || null,
         transformedScopeKeyEncoding: response?.transformedScopeKeyEncoding || response?.transformedKeyEncoding || null,
         algorithm: response?.algorithm || null,
       },
     };
   }
 
-  async request(path, { method = 'GET', body = null, errorMessage = 'PRE service request failed' } = {}) {
+  async request(path, {
+    method = 'GET',
+    body = null,
+    errorMessage = 'PRE service request failed',
+    baseUrl = null,
+  } = {}) {
     if (typeof fetch !== 'function') {
       throw createAppError('Global fetch API is not available in this Node.js runtime', 500, 'pre_fetch_unavailable');
     }
 
-    const endpoint = this.resolveEndpoint(path);
+    const endpoint = this.resolveEndpoint(path, baseUrl);
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -143,15 +150,15 @@ class PreServiceClient {
     }
   }
 
-  resolveEndpoint(path) {
-    const baseUrl = this.normalizeBaseUrl(this.baseUrl);
-    return new URL(path, baseUrl).toString();
+  resolveEndpoint(path, baseUrl) {
+    const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
+    return new URL(path, normalizedBaseUrl).toString();
   }
 
   normalizeBaseUrl(value) {
     const normalized = String(value || '').trim();
     if (!normalized) {
-      throw createAppError('PRE_SERVICE_BASE_URL is required to contact PRE service', 500, 'pre_configuration_error');
+      throw createAppError('PRE proxy baseUrl is required to contact PRE service', 500, 'pre_configuration_error');
     }
 
     return normalized.endsWith('/') ? normalized : `${normalized}/`;

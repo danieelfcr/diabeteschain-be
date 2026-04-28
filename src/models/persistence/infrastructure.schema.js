@@ -13,7 +13,7 @@ const sequelize = new Sequelize({
 
 /**
  * Proxy node model for infrastructure persistence.
- * Stores endpoint information and current availability state.
+ * Stores encrypted endpoint information and current availability state.
  */
 const ProxyNode = sequelize.define(
   'ProxyNode',
@@ -23,16 +23,15 @@ const ProxyNode = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    endpointUrl: {
-      type: DataTypes.STRING,
+    encryptedBaseUrl: {
+      type: DataTypes.TEXT,
       allowNull: false,
-      unique: true,
-      field: 'endpoint_url',
+      field: 'encrypted_base_url',
     },
     status: {
-      type: DataTypes.BOOLEAN,
+      type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: true, // ACTIVE: true, INACTIVE: false
+      defaultValue: 'ACTIVE',
     },
   },
   {

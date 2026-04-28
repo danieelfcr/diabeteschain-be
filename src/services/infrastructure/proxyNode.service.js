@@ -1,5 +1,6 @@
 const proxyNodeRepository = require('../../repositories/proxyNode.repository');
 const { createAppError } = require('../../utils/app-error');
+const { decryptProxyNodeBaseUrl } = require('../../utils/proxyNodeCrypto.utils');
 
 /**
  * Service responsible for resolving real PRE proxy nodes from the
@@ -41,6 +42,35 @@ class ProxyNodeService {
   }
 
   /**
+   * Select the PRE proxy set used for a grant.
+   *
+   * Rules:
+   * - 0 active proxies: fail
+   * - 1 active proxy: use it
+   * - 2 active proxies: use both
+   * - 3 or more active proxies: use 3 shuffled proxies without repetition
+   *
+   * @returns {Promise<Array<Object>>} Selected proxy nodes.
+   */
+  async selectProxyNodesForGrant() {
+    const availableNodes = await this.getAvailableProxyNodes();
+
+    if (availableNodes.length === 0) {
+      throw createAppError(
+        'No active PRE proxy nodes are available',
+        503,
+        'pre_proxy_nodes_unavailable'
+      );
+    }
+
+    if (availableNodes.length <= 2) {
+      return availableNodes;
+    }
+
+    return this.shuffle(availableNodes).slice(0, 3);
+  }
+
+  /**
    * Resolve proxy nodes by persisted identifiers while preserving input order.
    *
    * @param {string[]} ids - Proxy node identifiers to resolve.
@@ -62,7 +92,7 @@ class ProxyNodeService {
     }
 
     const inactiveIds = normalizedIds
-      .filter((id) => nodeMap.get(id)?.status !== 'AVAILABLE');
+      .filter((id) => nodeMap.get(id)?.status !== 'ACTIVE');
 
     if (inactiveIds.length > 0) {
       throw createAppError(`PRE proxy nodes are inactive: ${inactiveIds.join(', ')}`, 409, 'pre_proxy_nodes_inactive');
@@ -79,12 +109,22 @@ class ProxyNodeService {
    */
   mapProxyNode(node) {
     const plainNode = typeof node?.get === 'function' ? node.get({ plain: true }) : node;
+    const encryptedBaseUrl = plainNode.encryptedBaseUrl || plainNode.encrypted_base_url || null;
+
+    if (!encryptedBaseUrl) {
+      throw createAppError('PRE proxy node is missing encrypted base URL', 500, 'pre_proxy_node_invalid');
+    }
+
+    const endpointUrl = decryptProxyNodeBaseUrl(encryptedBaseUrl);
+    const status = plainNode.status === true || plainNode.status === 1
+      ? 'ACTIVE'
+      : String(plainNode.status || '').trim().toUpperCase();
 
     return {
       id: plainNode.id,
-      endpoint: plainNode.endpointUrl,
-      endpointUrl: plainNode.endpointUrl,
-      status: plainNode.status ? 'AVAILABLE' : 'INACTIVE',
+      endpoint: endpointUrl,
+      endpointUrl,
+      status: status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
     };
   }
 

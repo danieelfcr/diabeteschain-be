@@ -31,10 +31,13 @@ function normalizeTransformKeys(value) {
       throw createAppError(`Field transformKeys[${index}] must be an object`, 400);
     }
 
+    if (entry.proxyNodeId !== undefined) {
+      throw createAppError(`Field transformKeys[${index}].proxyNodeId is not allowed`, 400);
+    }
+
     return {
       scopeId: ensureNonEmptyString(entry.scopeId, `transformKeys[${index}].scopeId`),
       transformKey: ensureNonEmptyString(entry.transformKey, `transformKeys[${index}].transformKey`),
-      proxyNodeId: normalizeOptionalString(entry.proxyNodeId, `transformKeys[${index}].proxyNodeId`),
       transformKeyEncoding: entry.transformKeyEncoding || 'base64',
       metadata: normalizeOptionalObject(entry.metadata, `transformKeys[${index}].metadata`),
     };

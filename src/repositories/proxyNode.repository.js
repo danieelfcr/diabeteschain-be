@@ -17,7 +17,9 @@ class ProxyNodeRepository {
   async findAvailable() {
     return ProxyNode.findAll({
       where: {
-        status: true,
+        status: {
+          [Op.in]: ['ACTIVE', true, 1],
+        },
       },
       order: [['createdAt', 'ASC']],
     });
