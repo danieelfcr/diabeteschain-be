@@ -55,6 +55,9 @@ describe('PermissionOrchestrationService grantAccess', () => {
           patientPseudoId: 'patient-001',
           scopeId: 'scope-001',
           encryptedScopeKey: 'encrypted-scope-key',
+          metadata: {
+            encryptedScopeKeyEncoding: 'base64',
+          },
           status: 'ACTIVE',
         },
         txId: 'tx-scope-material-001',
@@ -72,12 +75,14 @@ describe('PermissionOrchestrationService grantAccess', () => {
         {
           scopeId: 'scope-001',
           transformKey: 'transform-key-001',
+          transformKeyEncoding: 'base64',
         },
       ],
       scopeMaterials: [
         {
           scopeId: 'scope-001',
           encryptedScopeKey: 'encrypted-scope-key',
+          encryptedScopeKeyEncoding: 'base64',
         },
       ],
     }, {
@@ -111,6 +116,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
         proxyIds: ['proxy-001'],
         status: 'ACTIVE',
         metadata: expect.objectContaining({
+          encryptedScopeKeyEncoding: 'base64',
           source: 'PATIENT_GRANT',
         }),
       })
@@ -123,6 +129,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
       granteeId: 'professional-001',
       scopeId: 'scope-001',
       transformKey: 'transform-key-001',
+      transformKeyEncoding: 'base64',
       proxyNodeId: 'proxy-001',
     }));
 
@@ -142,6 +149,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
           scopeMaterialId: 'smat-001',
           created: true,
           proxyIds: ['proxy-001'],
+          encryptedScopeKeyEncoding: 'base64',
           status: 'ACTIVE',
           txId: 'tx-scope-material-001',
         },
@@ -204,6 +212,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
         {
           scopeId: 'scope-001',
           transformKey: 'transform-key-001',
+          transformKeyEncoding: 'base64',
         },
       ],
     }, {
@@ -260,6 +269,9 @@ describe('PermissionOrchestrationService revokeAccess', () => {
         patientPseudoId,
         scopeId,
         encryptedScopeKey: `encrypted-${scopeId}`,
+        metadata: {
+          encryptedScopeKeyEncoding: 'base64',
+        },
         proxyIds: [`proxy-${scopeId}`],
       })),
     };
@@ -333,11 +345,12 @@ describe('PermissionOrchestrationService getScopeMaterialPreflight', () => {
           patientPseudoId: 'patient-001',
           scopeId: 'scope-001',
           encryptedScopeKey: 'encrypted-scope-key-001',
-          status: 'ACTIVE',
-          version: 1,
           metadata: {
             scheme: 'RECRYPT',
+            encryptedScopeKeyEncoding: 'base64',
           },
+          status: 'ACTIVE',
+          version: 1,
         },
       ]),
     };
@@ -366,6 +379,7 @@ describe('PermissionOrchestrationService getScopeMaterialPreflight', () => {
           exists: true,
           scopeMaterialId: 'smat-001',
           encryptedScopeKey: 'encrypted-scope-key-001',
+          encryptedScopeKeyEncoding: 'base64',
           status: 'ACTIVE',
           version: 1,
           metadata: {
