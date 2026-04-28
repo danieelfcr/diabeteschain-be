@@ -14,7 +14,10 @@ class RevokeAccessDTO {
    * @param {Object} payload - Request payload received from the client.
    */
   constructor(payload = {}) {
+    this.permissionId = payload.permissionId;
     this.professionalUsername = payload.professionalUsername;
+    this.granteeId = payload.granteeId;
+    this.scopes = payload.scopes;
     this.signature = payload.signature;
   }
 
@@ -25,18 +28,42 @@ class RevokeAccessDTO {
    * @throws {Error} When any required field is missing.
    */
   validate() {
-    const requiredFields = ['professionalUsername', 'signature'];
-
-    for (const field of requiredFields) {
-      if (!this[field]) {
-        throw createAppError(`Missing required field: ${field}`, 400);
-      }
+    if (!this.professionalUsername && !this.granteeId) {
+      throw createAppError('Missing required field: granteeId or professionalUsername', 400);
     }
 
-    this.professionalUsername = ensureNonEmptyString(
-      this.professionalUsername,
-      'professionalUsername'
-    );
+    if (this.permissionId) {
+      this.permissionId = ensureNonEmptyString(this.permissionId, 'permissionId');
+    }
+
+    if (this.professionalUsername) {
+      this.professionalUsername = ensureNonEmptyString(
+        this.professionalUsername,
+        'professionalUsername'
+      );
+    }
+
+    if (this.granteeId) {
+      this.granteeId = ensureNonEmptyString(this.granteeId, 'granteeId');
+    }
+
+    if (this.signature) {
+      this.signature = ensureNonEmptyString(this.signature, 'signature');
+    }
+
+    if (this.scopes !== undefined && this.scopes !== null) {
+      if (!Array.isArray(this.scopes)) {
+        throw createAppError('Field scopes must be an array', 400);
+      }
+
+      this.scopes = this.scopes
+        .map((scopeId) => String(scopeId || '').trim())
+        .filter(Boolean);
+
+      if (this.scopes.length === 0) {
+        throw createAppError('Field scopes must include at least one scope', 400);
+      }
+    }
   }
 
   /**
