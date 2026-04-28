@@ -17,7 +17,6 @@ class RevokeAccessDTO {
     this.permissionId = payload.permissionId;
     this.professionalUsername = payload.professionalUsername;
     this.granteeId = payload.granteeId;
-    this.scopes = payload.scopes;
     this.signature = payload.signature;
   }
 
@@ -49,20 +48,6 @@ class RevokeAccessDTO {
 
     if (this.signature) {
       this.signature = ensureNonEmptyString(this.signature, 'signature');
-    }
-
-    if (this.scopes !== undefined && this.scopes !== null) {
-      if (!Array.isArray(this.scopes)) {
-        throw createAppError('Field scopes must be an array', 400);
-      }
-
-      this.scopes = this.scopes
-        .map((scopeId) => String(scopeId || '').trim())
-        .filter(Boolean);
-
-      if (this.scopes.length === 0) {
-        throw createAppError('Field scopes must include at least one scope', 400);
-      }
     }
   }
 

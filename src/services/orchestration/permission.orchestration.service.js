@@ -317,9 +317,9 @@ class PermissionOrchestrationService {
     }
 
     const permissionId = activePermission.id || activePermission.permissionId || payload.permissionId || null;
-    const revokedScopes = payload.scopes && payload.scopes.length > 0
-      ? payload.scopes
-      : (Array.isArray(activePermission.allowedScopes) ? activePermission.allowedScopes : []);
+    const revokedScopes = Array.isArray(activePermission.allowedScopes)
+      ? activePermission.allowedScopes
+      : [];
 
     if (revokedScopes.length === 0) {
       throw createAppError('At least one scope is required to revoke transform keys', 400);

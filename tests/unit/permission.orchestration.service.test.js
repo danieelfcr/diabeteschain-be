@@ -219,6 +219,97 @@ describe('PermissionOrchestrationService grantAccess', () => {
   });
 });
 
+describe('PermissionOrchestrationService revokeAccess', () => {
+  it('revokes transform keys for every active permission scope and ignores request scopes', async () => {
+    const service = new PermissionOrchestrationService();
+    const allowedScopes = ['scope-001', 'scope-002'];
+
+    service.identityRepository = {
+      findUserByUsername: jest.fn()
+        .mockResolvedValueOnce({
+          id: 'patient-user-001',
+          pseudoId: 'patient-001',
+          username: 'patient_user',
+          publicKey: 'patient-public-key',
+          role: { name: 'PATIENT' },
+        })
+        .mockResolvedValueOnce({
+          id: 'professional-001',
+          username: 'doctor_user',
+          role: { name: 'DOCTOR' },
+        }),
+      verifySignature: jest.fn(),
+    };
+    service.fabricPermissionRepository = {
+      getActivePermissionByPatientAndGrantee: jest.fn().mockResolvedValue({
+        permissionId: 'permission-001',
+        patientPseudoId: 'patient-001',
+        granteeId: 'professional-001',
+        allowedScopes,
+        status: 'ACTIVE',
+        validFrom: '2026-01-01T00:00:00.000Z',
+        validTo: '2027-01-01T00:00:00.000Z',
+      }),
+      revokeAccess: jest.fn().mockResolvedValue({
+        permissionId: 'permission-001',
+        status: 'REVOKED',
+      }),
+    };
+    service.fabricClinicalRecordRepository = {
+      getScopeMaterialByPatientAndScope: jest.fn((patientPseudoId, scopeId) => Promise.resolve({
+        patientPseudoId,
+        scopeId,
+        encryptedScopeKey: `encrypted-${scopeId}`,
+        proxyIds: [`proxy-${scopeId}`],
+      })),
+    };
+    service.proxyNodeService = {
+      getProxyNodesByIds: jest.fn((proxyIds) => Promise.resolve(proxyIds.map((proxyId) => ({
+        id: proxyId,
+        endpointUrl: `http://${proxyId}.local:4100`,
+      })))),
+    };
+    service.preServiceClient = {
+      revokeTransformKey: jest.fn().mockResolvedValue({
+        status: 'REVOKED',
+      }),
+    };
+
+    const result = await service.revokeAccess({
+      professionalUsername: 'doctor_user',
+      scopes: ['scope-ignored'],
+    }, {
+      id: 'patient-user-001',
+      pseudoId: 'patient-001',
+      username: 'patient_user',
+      role: 'PATIENT',
+    });
+
+    expect(result.revokedScopes).toEqual(allowedScopes);
+    expect(service.fabricClinicalRecordRepository.getScopeMaterialByPatientAndScope)
+      .toHaveBeenCalledTimes(2);
+    expect(service.fabricClinicalRecordRepository.getScopeMaterialByPatientAndScope)
+      .toHaveBeenNthCalledWith(1, 'patient-001', 'scope-001');
+    expect(service.fabricClinicalRecordRepository.getScopeMaterialByPatientAndScope)
+      .toHaveBeenNthCalledWith(2, 'patient-001', 'scope-002');
+    expect(service.preServiceClient.revokeTransformKey).toHaveBeenCalledWith(expect.objectContaining({
+      permissionId: 'permission-001',
+      patientPseudoId: 'patient-001',
+      granteeId: 'professional-001',
+      scopeId: 'scope-001',
+    }));
+    expect(service.preServiceClient.revokeTransformKey).toHaveBeenCalledWith(expect.objectContaining({
+      permissionId: 'permission-001',
+      patientPseudoId: 'patient-001',
+      granteeId: 'professional-001',
+      scopeId: 'scope-002',
+    }));
+    expect(service.preServiceClient.revokeTransformKey).not.toHaveBeenCalledWith(expect.objectContaining({
+      scopeId: 'scope-ignored',
+    }));
+  });
+});
+
 describe('PermissionOrchestrationService getScopeMaterialPreflight', () => {
   it('returns existing and missing scope material status for the authenticated patient', async () => {
     const service = new PermissionOrchestrationService();
