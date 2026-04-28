@@ -21,6 +21,8 @@ function normalizeOptionalObject(value, fieldName) {
   return value;
 }
 
+// transformKey and encryptedScopeKey must represent serialized Recrypt objects
+// (base64/json). Cryptographic validation is delegated to the PRE service.
 function normalizeTransformKeys(value) {
   if (!Array.isArray(value) || value.length === 0) {
     throw createAppError('Missing required field: transformKeys', 400);
@@ -38,7 +40,10 @@ function normalizeTransformKeys(value) {
     return {
       scopeId: ensureNonEmptyString(entry.scopeId, `transformKeys[${index}].scopeId`),
       transformKey: ensureNonEmptyString(entry.transformKey, `transformKeys[${index}].transformKey`),
-      transformKeyEncoding: entry.transformKeyEncoding || 'base64',
+      transformKeyEncoding: ensureNonEmptyString(
+        entry.transformKeyEncoding,
+        `transformKeys[${index}].transformKeyEncoding`
+      ),
       metadata: normalizeOptionalObject(entry.metadata, `transformKeys[${index}].metadata`),
     };
   });
@@ -63,6 +68,10 @@ function normalizeScopeMaterials(value) {
       encryptedScopeKey: ensureNonEmptyString(
         entry.encryptedScopeKey || entry.enc_k_scope,
         `scopeMaterials[${index}].encryptedScopeKey`
+      ),
+      encryptedScopeKeyEncoding: ensureNonEmptyString(
+        entry.encryptedScopeKeyEncoding,
+        `scopeMaterials[${index}].encryptedScopeKeyEncoding`
       ),
       recryptMetadata: normalizeOptionalObject(
         entry.recryptMetadata,

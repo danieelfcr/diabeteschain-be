@@ -3,7 +3,6 @@ const {
   parseFabricResult,
   normalizeActivePermission,
   normalizeActivePermissions,
-  normalizeScopeMaterials,
 } = require('../utils/fabricPermission.utils');
 
 /**
@@ -100,17 +99,6 @@ class FabricPermissionRepository {
     );
 
     return normalizeActivePermissions(result);
-  }
-
-  /**
-   * Retrieve delegated scope materials linked to the provided permission ids.
-   *
-   * @param {string[]} permissionIds - Permission identifiers to resolve.
-   * @returns {Promise<Array<Object>>} Scope material entries for the permissions.
-   */
-  async getScopeMaterialsByPermissionIds(permissionIds = []) {
-    const result = await this.evaluateTransaction('GetScopeMaterialsByPermissionIds', permissionIds);
-    return normalizeScopeMaterials(result);
   }
 
   /**

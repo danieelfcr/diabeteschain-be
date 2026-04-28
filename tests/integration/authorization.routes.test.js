@@ -58,6 +58,7 @@ const buildGrantPayload = () => ({
     {
       scopeId: '8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2',
       transformKey: 'transform-key-001',
+      transformKeyEncoding: 'base64',
     },
   ],
 });

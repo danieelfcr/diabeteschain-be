@@ -34,6 +34,7 @@ describe('PreServiceClient', () => {
       granteeId: 'professional-001',
       scopeId: 'scope-001',
       transformKey: 'transform-key-001',
+      transformKeyEncoding: 'base64',
       validFrom: '2026-01-01T00:00:00.000Z',
       validTo: '2026-12-31T23:59:59.000Z',
     });
@@ -52,7 +53,13 @@ describe('PreServiceClient', () => {
       granteeId: 'professional-001',
       scopeId: 'scope-001',
       transformKey: 'transform-key-001',
+      transformKeyEncoding: 'base64',
+      validFrom: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-12-31T23:59:59.000Z',
     });
+    expect(requestBody.metadata).not.toHaveProperty('validFrom');
+    expect(requestBody.metadata).not.toHaveProperty('proxyNodeId');
+    expect(requestBody).not.toHaveProperty('proxyNodeId');
     expect(requestBody).not.toHaveProperty('patientId');
     expect(result).toEqual({
       scopeId: 'scope-001',
@@ -83,11 +90,13 @@ describe('PreServiceClient', () => {
       granteeId: 'professional-001',
       scopeId: 'scope-001',
       encryptedScopeKey: 'encrypted-scope-key',
+      encryptedScopeKeyEncoding: 'base64',
     });
 
     expect(global.fetch.mock.calls[0][0]).toBe('http://pre-proxy.local:4100/transform');
     expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toMatchObject({
       encryptedScopeKey: 'encrypted-scope-key',
+      encryptedScopeKeyEncoding: 'base64',
     });
     expect(JSON.parse(global.fetch.mock.calls[0][1].body)).not.toHaveProperty('encryptedKey');
     expect(result).toEqual({

@@ -12,6 +12,7 @@ describe('GrantAccessDTO', () => {
       {
         scopeId: 'scope-001',
         transformKey: 'transform-key-001',
+        transformKeyEncoding: 'base64',
       },
     ],
     ...overrides,
@@ -42,12 +43,24 @@ describe('GrantAccessDTO', () => {
     }))).toThrow('Field transformKeys[0].proxyNodeId is not allowed');
   });
 
+  it('requires transform key encoding', () => {
+    expect(() => GrantAccessDTO.from(buildPayload({
+      transformKeys: [
+        {
+          scopeId: 'scope-001',
+          transformKey: 'transform-key-001',
+        },
+      ],
+    }))).toThrow('Missing required field: transformKeys[0].transformKeyEncoding');
+  });
+
   it('normalizes patient-provided scope materials for eager creation', () => {
     const dto = GrantAccessDTO.from(buildPayload({
       scopeMaterials: [
         {
           scopeId: 'scope-001',
           encryptedScopeKey: 'encrypted-scope-key',
+          encryptedScopeKeyEncoding: 'base64',
         },
       ],
     }));
@@ -56,6 +69,7 @@ describe('GrantAccessDTO', () => {
       {
         scopeId: 'scope-001',
         encryptedScopeKey: 'encrypted-scope-key',
+        encryptedScopeKeyEncoding: 'base64',
         recryptMetadata: {},
         metadata: {},
       },
@@ -77,6 +91,7 @@ describe('GrantAccessDTO', () => {
         {
           scopeId: 'scope-001',
           transformKey: 'transform-key-001',
+          transformKeyEncoding: 'base64',
         },
       ],
     });
@@ -100,5 +115,16 @@ describe('GrantAccessDTO', () => {
         },
       ],
     }))).toThrow('Missing required field: scopeMaterials[0].encryptedScopeKey');
+  });
+
+  it('requires encrypted scope key encoding', () => {
+    expect(() => GrantAccessDTO.from(buildPayload({
+      scopeMaterials: [
+        {
+          scopeId: 'scope-001',
+          encryptedScopeKey: 'encrypted-scope-key',
+        },
+      ],
+    }))).toThrow('Missing required field: scopeMaterials[0].encryptedScopeKeyEncoding');
   });
 });

@@ -33,6 +33,9 @@ describe('ClinicalRecordOrchestrationService ScopeMaterial handling', () => {
         patientPseudoId: 'patient-001',
         scopeId: 'scope-001',
         encryptedScopeKey: 'encrypted-scope-key',
+        metadata: {
+          encryptedScopeKeyEncoding: 'base64',
+        },
         status: 'ACTIVE',
       }),
       createScopeMaterial: jest.fn(),
@@ -86,6 +89,7 @@ describe('ClinicalRecordOrchestrationService PRE proxy fallback', () => {
       granteeId: 'professional-001',
       scopeId: 'scope-001',
       encryptedScopeKey: 'encrypted-scope-key',
+      encryptedScopeKeyEncoding: 'base64',
       proxyIds: ['proxy-a', 'proxy-b'],
     });
 
@@ -94,6 +98,7 @@ describe('ClinicalRecordOrchestrationService PRE proxy fallback', () => {
     expect(service.preServiceClient.transformScopeKey.mock.calls[0][0]).toMatchObject({
       baseUrl: 'http://proxy-a.local:4100',
       proxyNodeId: 'proxy-a',
+      encryptedScopeKeyEncoding: 'base64',
     });
     expect(service.preServiceClient.transformScopeKey.mock.calls[1][0]).toMatchObject({
       baseUrl: 'http://proxy-b.local:4100',

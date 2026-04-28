@@ -17,13 +17,12 @@ class PreServiceClient {
         granteeId: payload.granteeId,
         scopeId: payload.scopeId,
         transformKey: payload.transformKey,
-        transformKeyEncoding: payload.transformKeyEncoding || 'base64',
+        transformKeyEncoding: payload.transformKeyEncoding,
+        validFrom: payload.validFrom || null,
         expiresAt: payload.validTo || payload.expiresAt || null,
         algorithm: payload.algorithm || 'RECRYPT_V1',
         metadata: {
           ...(payload.metadata || {}),
-          proxyNodeId: payload.proxyNodeId || null,
-          validFrom: payload.validFrom || null,
           status: payload.status || 'ACTIVE',
         },
       },
@@ -33,7 +32,7 @@ class PreServiceClient {
 
     return {
       scopeId: payload.scopeId,
-      proxyNodeId: payload.proxyNodeId || response?.proxyNodeId || response?.proxyId || null,
+      proxyNodeId: response?.proxyNodeId || response?.proxyId || payload.proxyNodeId || null,
       transformKeyId: response?.transformKeyId || response?.id || null,
       status: 'REGISTERED',
     };
@@ -68,8 +67,8 @@ class PreServiceClient {
         granteeId: payload.granteeId,
         scopeId: payload.scopeId,
         encryptedScopeKey: payload.encryptedScopeKey,
-        encryptedScopeKeyEncoding: payload.encryptedScopeKeyEncoding || 'base64',
-        encryptedKeyEncoding: payload.encryptedScopeKeyEncoding || 'base64',
+        encryptedScopeKeyEncoding: payload.encryptedScopeKeyEncoding,
+        encryptedKeyEncoding: payload.encryptedScopeKeyEncoding,
       },
       errorMessage: 'Unable to transform scope key in PRE service',
       baseUrl: payload.baseUrl,
@@ -88,7 +87,7 @@ class PreServiceClient {
       scopeId: payload.scopeId,
       transformedScopeKey,
       metadata: {
-        proxyNodeId: payload.proxyNodeId || response?.proxyNodeId || response?.proxyId || null,
+        proxyNodeId: response?.proxyNodeId || response?.proxyId || payload.proxyNodeId || null,
         transformedScopeKeyEncoding: response?.transformedScopeKeyEncoding || response?.transformedKeyEncoding || null,
         algorithm: response?.algorithm || null,
       },
