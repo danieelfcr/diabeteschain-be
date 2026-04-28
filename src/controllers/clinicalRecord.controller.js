@@ -50,6 +50,7 @@ class ClinicalRecordController {
     try {
       const payload = req.validatedBody || GetProfessionalHistoryDTO.from({
         patientUsername: req.params.patientUsername,
+        scopeIds: req.query.scopeIds || req.query.scopes,
       });
 
       const result = await this.orchestrationService.getProfessionalHistory(payload, req.user);
