@@ -183,7 +183,7 @@ function normalizeAuditEvent(event) {
   const normalizedEvent = {
     auditId: event.auditId || event.id || event.eventId || null,
     docType: 'auditEvent',
-    patientId: event.patientId || event.patientPseudoId || null,
+    patientPseudoId: event.patientPseudoId || event.patientId || null,
     actorId: event.actorId || event.createdBy || event.granteeId || null,
     actorRole: typeof (event.actorRole || event.authorRole || event.granteeRole || null) === 'string'
       ? String(event.actorRole || event.authorRole || event.granteeRole).trim().toLowerCase() || null
@@ -197,7 +197,7 @@ function normalizeAuditEvent(event) {
 
   if (
     !normalizedEvent.auditId ||
-    !normalizedEvent.patientId ||
+    !normalizedEvent.patientPseudoId ||
     !normalizedEvent.actorId ||
     !normalizedEvent.actorRole ||
     !normalizedEvent.action ||
