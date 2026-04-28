@@ -52,3 +52,53 @@ describe('ClinicalRecordOrchestrationService ScopeMaterial handling', () => {
     });
   });
 });
+
+describe('ClinicalRecordOrchestrationService PRE proxy fallback', () => {
+  it('tries ScopeMaterial proxyIds in order until one transforms the scope key', async () => {
+    const service = new ClinicalRecordOrchestrationService();
+    service.proxyNodeService = {
+      getProxyNodesByIds: jest.fn().mockResolvedValue([
+        {
+          id: 'proxy-a',
+          endpointUrl: 'http://proxy-a.local:4100',
+        },
+        {
+          id: 'proxy-b',
+          endpointUrl: 'http://proxy-b.local:4100',
+        },
+      ]),
+    };
+    service.preServiceClient = {
+      transformScopeKey: jest.fn()
+        .mockRejectedValueOnce(new Error('proxy-a unavailable'))
+        .mockResolvedValueOnce({
+          scopeId: 'scope-001',
+          transformedScopeKey: 'transformed-scope-key',
+          metadata: {
+            proxyNodeId: 'proxy-b',
+          },
+        }),
+    };
+
+    const result = await service.transformScopeKeyWithProxyFallback({
+      permissionId: 'permission-001',
+      patientPseudoId: 'patient-001',
+      granteeId: 'professional-001',
+      scopeId: 'scope-001',
+      encryptedScopeKey: 'encrypted-scope-key',
+      proxyIds: ['proxy-a', 'proxy-b'],
+    });
+
+    expect(service.proxyNodeService.getProxyNodesByIds).toHaveBeenCalledWith(['proxy-a', 'proxy-b']);
+    expect(service.preServiceClient.transformScopeKey).toHaveBeenCalledTimes(2);
+    expect(service.preServiceClient.transformScopeKey.mock.calls[0][0]).toMatchObject({
+      baseUrl: 'http://proxy-a.local:4100',
+      proxyNodeId: 'proxy-a',
+    });
+    expect(service.preServiceClient.transformScopeKey.mock.calls[1][0]).toMatchObject({
+      baseUrl: 'http://proxy-b.local:4100',
+      proxyNodeId: 'proxy-b',
+    });
+    expect(result.transformedScopeKey).toBe('transformed-scope-key');
+  });
+});

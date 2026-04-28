@@ -27,8 +27,19 @@ describe('PermissionOrchestrationService grantAccess', () => {
     service.preServiceClient = {
       registerTransformKey: jest.fn().mockResolvedValue({
         scopeId: 'scope-001',
+        proxyNodeId: 'proxy-001',
         status: 'REGISTERED',
       }),
+    };
+    service.proxyNodeService = {
+      selectProxyNodesForGrant: jest.fn().mockResolvedValue([
+        {
+          id: 'proxy-001',
+          endpointUrl: 'http://pre-proxy.local:4100',
+          status: 'ACTIVE',
+        },
+      ]),
+      getProxyNodesByIds: jest.fn(),
     };
     service.fabricPermissionRepository = {
       grantAccess: jest.fn().mockResolvedValue({
@@ -97,6 +108,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
         patientPseudoId: 'patient-001',
         scopeId: 'scope-001',
         encryptedScopeKey: 'encrypted-scope-key',
+        proxyIds: ['proxy-001'],
         status: 'ACTIVE',
         metadata: expect.objectContaining({
           source: 'PATIENT_GRANT',
@@ -105,11 +117,13 @@ describe('PermissionOrchestrationService grantAccess', () => {
     );
 
     expect(service.preServiceClient.registerTransformKey).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: 'http://pre-proxy.local:4100',
       permissionId: 'permission-001',
       patientPseudoId: 'patient-001',
       granteeId: 'professional-001',
       scopeId: 'scope-001',
       transformKey: 'transform-key-001',
+      proxyNodeId: 'proxy-001',
     }));
 
     expect(result).toMatchObject({
@@ -118,6 +132,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
       transformKeysRegistered: [
         {
           scopeId: 'scope-001',
+          proxyNodeId: 'proxy-001',
           status: 'REGISTERED',
         },
       ],
@@ -126,6 +141,7 @@ describe('PermissionOrchestrationService grantAccess', () => {
           scopeId: 'scope-001',
           scopeMaterialId: 'smat-001',
           created: true,
+          proxyIds: ['proxy-001'],
           status: 'ACTIVE',
           txId: 'tx-scope-material-001',
         },
@@ -165,6 +181,16 @@ describe('PermissionOrchestrationService grantAccess', () => {
     };
     service.preServiceClient = {
       registerTransformKey: jest.fn(),
+    };
+    service.proxyNodeService = {
+      selectProxyNodesForGrant: jest.fn().mockResolvedValue([
+        {
+          id: 'proxy-001',
+          endpointUrl: 'http://pre-proxy.local:4100',
+          status: 'ACTIVE',
+        },
+      ]),
+      getProxyNodesByIds: jest.fn(),
     };
 
     await expect(service.grantAccess({

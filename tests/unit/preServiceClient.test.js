@@ -4,14 +4,12 @@ describe('PreServiceClient', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    process.env.PRE_SERVICE_BASE_URL = 'http://pre.local:4100';
     process.env.PRE_SERVICE_TIMEOUT_MS = '5000';
     global.fetch = jest.fn();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
-    delete process.env.PRE_SERVICE_BASE_URL;
     jest.clearAllMocks();
   });
 
@@ -29,6 +27,8 @@ describe('PreServiceClient', () => {
 
     const client = new PreServiceClient();
     const result = await client.registerTransformKey({
+      baseUrl: 'http://pre-proxy.local:4100',
+      proxyNodeId: 'proxy-001',
       permissionId: 'permission-001',
       patientPseudoId: 'patient-001',
       granteeId: 'professional-001',
@@ -39,7 +39,7 @@ describe('PreServiceClient', () => {
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://pre.local:4100/transform-keys',
+      'http://pre-proxy.local:4100/transform-keys',
       expect.objectContaining({
         method: 'POST',
       })
@@ -77,6 +77,7 @@ describe('PreServiceClient', () => {
 
     const client = new PreServiceClient();
     const result = await client.transformScopeKey({
+      baseUrl: 'http://pre-proxy.local:4100',
       permissionId: 'permission-001',
       patientPseudoId: 'patient-001',
       granteeId: 'professional-001',
@@ -84,6 +85,7 @@ describe('PreServiceClient', () => {
       encryptedScopeKey: 'encrypted-scope-key',
     });
 
+    expect(global.fetch.mock.calls[0][0]).toBe('http://pre-proxy.local:4100/transform');
     expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toMatchObject({
       encryptedScopeKey: 'encrypted-scope-key',
     });

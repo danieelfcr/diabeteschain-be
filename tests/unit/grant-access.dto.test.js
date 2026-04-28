@@ -24,11 +24,22 @@ describe('GrantAccessDTO', () => {
       {
         scopeId: 'scope-001',
         transformKey: 'transform-key-001',
-        proxyNodeId: null,
         transformKeyEncoding: 'base64',
         metadata: {},
       },
     ]);
+  });
+
+  it('rejects client-supplied proxy node identifiers', () => {
+    expect(() => GrantAccessDTO.from(buildPayload({
+      transformKeys: [
+        {
+          scopeId: 'scope-001',
+          transformKey: 'transform-key-001',
+          proxyNodeId: 'proxy-001',
+        },
+      ],
+    }))).toThrow('Field transformKeys[0].proxyNodeId is not allowed');
   });
 
   it('normalizes patient-provided scope materials for eager creation', () => {
