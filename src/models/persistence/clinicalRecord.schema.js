@@ -29,7 +29,6 @@ const ClinicalRecordSchema = new mongoose.Schema(
       iv: { type: String, required: true, trim: true },
       authTag: { type: String, required: true, trim: true },
       ciphertext: { type: String, required: true, trim: true },
-      capsule: { type: String, default: null, trim: true },
     },
     integrity: {
       payloadHash: { type: String, required: true, trim: true },

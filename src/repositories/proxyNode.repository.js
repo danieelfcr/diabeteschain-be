@@ -17,7 +17,9 @@ class ProxyNodeRepository {
   async findAvailable() {
     return ProxyNode.findAll({
       where: {
-        status: true,
+        status: {
+          [Op.in]: ['ACTIVE', true, 1],
+        },
       },
       order: [['createdAt', 'ASC']],
     });
@@ -43,6 +45,31 @@ class ProxyNodeRepository {
         },
       },
     });
+  }
+
+  /**
+   * Retrieve one proxy node by its persisted identifier.
+   *
+   * @param {string} id - Proxy node identifier.
+   * @returns {Promise<Object|null>} Matching proxy node row or null.
+   */
+  async findById(id) {
+    if (!id) {
+      return null;
+    }
+
+    return ProxyNode.findByPk(id);
+  }
+
+  /**
+   * Create or update one proxy node.
+   *
+   * @param {Object} data - Proxy node data to persist.
+   * @returns {Promise<Object|null>} Persisted proxy node row.
+   */
+  async upsert(data) {
+    await ProxyNode.upsert(data);
+    return this.findById(data.id);
   }
 }
 

@@ -22,6 +22,9 @@ jest.mock('../../src/controllers/clinicalRecord.controller', () =>
 
 jest.mock('../../src/controllers/permission.controller', () =>
   jest.fn().mockImplementation(() => ({
+    getScopeMaterialPreflight(req, res) {
+      return res.status(200).json({ authenticatedUser: req.user });
+    },
     grantAccess(req, res) {
       return res.status(201).json({ authenticatedUser: req.user });
     },
@@ -51,10 +54,12 @@ const buildGrantPayload = () => ({
   validFrom: '2026-01-01T00:00:00.000Z',
   validTo: '2026-12-31T23:59:59.000Z',
   signature: 'grant-signature',
-  kfrags: ['kfrag-001'],
-  capsuleByScope: {
-    '8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2': 'base64-scope-capsule',
-  },
+  transformKeys: [
+    {
+      scopeId: '8f4b8d0e-2d34-4cb3-b94d-7e4c8d1a31f2',
+      transformKey: 'transform-key-001',
+    },
+  ],
 });
 
 const buildClinicalPayload = () => ({
@@ -103,6 +108,38 @@ describe('Role authorization integration', () => {
       .post('/permissions/grants')
       .set('Authorization', `Bearer ${token}`)
       .send(buildGrantPayload());
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Forbidden for current role');
+  });
+
+  it('permite que un PATIENT llame POST /permissions/scope-materials/preflight', async () => {
+    const token = buildToken({
+      id: 'patient-id-preflight',
+      pseudoId: 'patient-pseudo-preflight',
+      role: 'PATIENT',
+    });
+
+    const response = await request(app)
+      .post('/permissions/scope-materials/preflight')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scopeIds: ['scope-001'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.authenticatedUser.role).toBe('PATIENT');
+  });
+
+  it('rechaza con 403 a un DOCTOR en POST /permissions/scope-materials/preflight', async () => {
+    const token = buildToken({
+      id: 'doctor-id-preflight',
+      role: 'DOCTOR',
+      professionalId: 'COL-PREFLIGHT',
+    });
+
+    const response = await request(app)
+      .post('/permissions/scope-materials/preflight')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scopeIds: ['scope-001'] });
 
     expect(response.status).toBe(403);
     expect(response.body.error).toBe('Forbidden for current role');

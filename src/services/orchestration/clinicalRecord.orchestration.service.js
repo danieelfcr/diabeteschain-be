@@ -3,7 +3,7 @@ const ClinicalRecordRepository = require('../../repositories/clinicalRecord.repo
 const FabricClinicalRecordRepository = require('../../repositories/fabricClinicalRecord.repository');
 const FabricPermissionRepository = require('../../repositories/fabricPermission.repository');
 const IdentityRepository = require('../../repositories/identity.repository');
-const ProxyReencryptionClient = require('../../clients/proxyReencryption/proxyReencryption.client');
+const PreServiceClient = require('../../clients/preServiceClient');
 const ScopeCatalogService = require('../infrastructure/scopeCatalog.service');
 const ProxyNodeService = require('../infrastructure/proxyNode.service');
 const { mapClinicalRecord } = require('../../mappers/clinicalRecord.mapper');
@@ -12,10 +12,9 @@ const {
   getRecordIdentifier,
   normalizePermission,
   normalizePermissions,
-  normalizeScopeMaterials,
+  normalizeScopeMaterial,
   isPermissionActive,
   getEffectiveScopes,
-  filterScopeMaterialsByScopes,
   filterReferencesByScopes,
   normalizeRecordType,
   getLedgerAuthorRole,
@@ -31,8 +30,6 @@ const {
   buildPharmacyDispatchSignaturePayload,
 } = require('../../utils/signaturePayload.utils');
 
-const PRE_THRESHOLD = Number(process.env.PRE_THRESHOLD || 3);
-
 /**
  * Service responsible for coordinating clinical record use cases.
  */
@@ -46,7 +43,7 @@ class ClinicalRecordOrchestrationService {
     this.fabricClinicalRecordRepository = new FabricClinicalRecordRepository();
     this.fabricPermissionRepository = new FabricPermissionRepository();
     this.identityRepository = new IdentityRepository();
-    this.proxyReencryptionClient = new ProxyReencryptionClient();
+    this.preServiceClient = new PreServiceClient();
     this.scopeCatalogService = new ScopeCatalogService();
     this.proxyNodeService = new ProxyNodeService();
   }
@@ -146,8 +143,12 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Missing required field: signature', 400);
     }
 
+    // ============================================================================================== //
+
     // 2. Validate that the requested clinical scopes exist off-chain.
     await this.scopeCatalogService.assertActiveScopeIds(requestedScopes);
+
+    // ============================================================================================== //
 
     // 3. Resolve patient and professional identities from trusted sources.
     const patient = await this.identityRepository.findUserByUsername(patientUsername);
@@ -173,6 +174,8 @@ class ClinicalRecordOrchestrationService {
       throw createAppError(`Authenticated user must have ${requiredRole} role`, 403);
     }
 
+    // ============================================================================================== //
+
     // 4. Verify the signature before persisting anything.
     await this.verifyRequestSignature({
       publicKey: professional.publicKey,
@@ -180,6 +183,8 @@ class ClinicalRecordOrchestrationService {
       signature,
       errorMessage: invalidSignatureMessage,
     });
+
+    // ============================================================================================== //
 
     // 5. Re-check the active write permission in blockchain.
     const permission = normalizePermission(
@@ -198,6 +203,8 @@ class ClinicalRecordOrchestrationService {
     }
 
     validateRequestedScopes(permission, requestedScopes);
+
+    // ============================================================================================== //
 
     return {
       actor,
@@ -230,10 +237,14 @@ class ClinicalRecordOrchestrationService {
     professionalId = null,
     professionalRole = null,
   }) {
+    // 1. Validate that the request references a base record.
     if (!recordId) {
       throw createAppError('Missing required field: basedOn', 400);
     }
 
+    // ============================================================================================== //
+
+    // 2. Retrieve and validate the off-chain base record.
     const baseRecord = await this.clinicalRecordRepository.findById(recordId);
     if (!baseRecord) {
       throw createAppError(`${label} not found`, 404);
@@ -247,6 +258,9 @@ class ClinicalRecordOrchestrationService {
       throw createAppError(`${label} must be a ${expectedRecordType}`, 400);
     }
 
+    // ============================================================================================== //
+
+    // 3. Retrieve the matching blockchain index, including audit context when available.
     const baseReference = await this.fabricClinicalRecordRepository.getClinicalRecordIndexByRecordId(
       patientPseudoId,
       recordId,
@@ -262,6 +276,9 @@ class ClinicalRecordOrchestrationService {
       throw createAppError(`${label} clinical index not found in blockchain`, 404);
     }
 
+    // ============================================================================================== //
+
+    // 4. Validate that the blockchain index matches the expected type and remains active.
     const referenceRecordType = normalizeRecordType(baseReference.recordType);
     if (referenceRecordType && referenceRecordType !== expectedRecordType) {
       throw createAppError(`${label} blockchain index does not match the expected record type`, 400);
@@ -272,10 +289,42 @@ class ClinicalRecordOrchestrationService {
       throw createAppError(`${label} is not active`, 400);
     }
 
+    // ============================================================================================== //
+
     return {
       record: baseRecord,
       reference: baseReference,
     };
+  }
+
+  /**
+   * Resolve existing patient-owned scope material for clinical writes.
+   *
+   * Scope material creation is intentionally handled by the patient grant flow,
+   * so healthcare professional event registration only reuses active material.
+   *
+   * @param {Object} input - Scope material resolution input.
+   * @param {string} input.patientPseudoId - Patient pseudo identifier.
+   * @param {string} input.scopeId - Clinical scope identifier.
+   * @returns {Promise<Object>} Scope material resolution result.
+   */
+  async resolveScopeMaterialForRecord({ patientPseudoId, scopeId }) {
+    const existingScopeMaterial = normalizeScopeMaterial(
+      await this.fabricClinicalRecordRepository.getScopeMaterialByPatientAndScope(patientPseudoId, scopeId)
+    );
+
+    if (existingScopeMaterial) {
+      return {
+        scopeMaterial: existingScopeMaterial,
+        scopeMaterialCreated: false,
+        scopeMaterialTxId: null,
+      };
+    }
+
+    throw createAppError(
+      'ScopeMaterial must be initialized by the patient before registering clinical records for this scope',
+      409
+    );
   }
 
   /**
@@ -303,6 +352,11 @@ class ClinicalRecordOrchestrationService {
     // 1. Validate the target scope against the active permission.
     validateRequestedScopes(context.permission, [recordInput.scopeId]);
 
+    const scopeMaterialResolution = await this.resolveScopeMaterialForRecord({
+      patientPseudoId: context.patientPseudoId,
+      scopeId: recordInput.scopeId,
+    });
+
     const recordId = options.recordId || crypto.randomUUID();
     const encounterId = options.encounterId !== undefined
       ? options.encounterId
@@ -320,11 +374,13 @@ class ClinicalRecordOrchestrationService {
     });
 
     let savedRecord = null;
-
+    // ============================================================================================== //
     try {
       // 2. Persist the encrypted record in MongoDB.
       savedRecord = await this.clinicalRecordRepository.create(clinicalRecordData);
       const savedRecordObject = toPlainObject(savedRecord);
+
+      // ============================================================================================== //
 
       // 3. Register the matching clinical index in blockchain.
       const clinicalRecordIndex = buildClinicalRecordIndex({
@@ -336,12 +392,21 @@ class ClinicalRecordOrchestrationService {
         clinicalRecordIndex
       );
 
+      // ============================================================================================== //
+
       return {
-        record: mapClinicalRecord(
-          savedRecordObject,
-          registeredIndex && typeof registeredIndex === 'object' ? registeredIndex : clinicalRecordIndex
-        ),
+        record: {
+          ...mapClinicalRecord(
+            savedRecordObject,
+            registeredIndex && typeof registeredIndex === 'object' ? registeredIndex : clinicalRecordIndex
+          ),
+          scopeMaterialCreated: scopeMaterialResolution.scopeMaterialCreated,
+          scopeMaterialId: scopeMaterialResolution.scopeMaterial?.scopeMaterialId || null,
+        },
         index: registeredIndex && typeof registeredIndex === 'object' ? registeredIndex : clinicalRecordIndex,
+        scopeMaterial: scopeMaterialResolution.scopeMaterial,
+        scopeMaterialCreated: scopeMaterialResolution.scopeMaterialCreated,
+        scopeMaterialTxId: scopeMaterialResolution.scopeMaterialTxId,
       };
     } catch (error) {
       if (savedRecord?._id) {
@@ -389,8 +454,12 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Authenticated patient pseudoId is required', 400);
     }
 
+    // ============================================================================================== //
+
     // 2. Retrieve clinical references/indexes from the ledger for the patient
     const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexes(patientPseudoId);
+
+    // ============================================================================================== //
 
     // 3. Retrieve encrypted off-chain clinical records for the patient
     const records = references.length
@@ -403,6 +472,18 @@ class ClinicalRecordOrchestrationService {
         .filter(([recordId]) => Boolean(recordId))
     );
 
+    const historyScopes = [...new Set(
+      [
+        ...references.map((reference) => reference.scopeId || reference.scope || null),
+        ...records.map((record) => record.scopeId || null),
+      ].filter(Boolean)
+    )];
+    const scopeMaterials = historyScopes.length
+      ? await this.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes(patientPseudoId, historyScopes)
+      : [];
+    
+    // ============================================================================================== //
+
     return {
       message: 'Patient history retrieved successfully',
       status: 'success',
@@ -411,6 +492,7 @@ class ClinicalRecordOrchestrationService {
         username: patient.username || patientUsername,
       },
       totalRecords: records.length,
+      scopeMaterials: scopeMaterials.map((scopeMaterial) => this.mapScopeMaterialForResponse(scopeMaterial)),
       records: records.map((record) => mapClinicalRecord(record, referenceMap.get(getRecordIdentifier(record)) || null)),
     };
   }
@@ -424,8 +506,8 @@ class ClinicalRecordOrchestrationService {
    * @returns {Promise<Object>} Placeholder orchestration response.
    */
   async getProfessionalHistory(payload, actor) {
-    // 1. Validations
-    // 1.1 Validate that the actor is authenticated and has a healthcare professional role
+    // 1. Validate the request actor and required identities.
+    // 1.1 Validate that the actor is authenticated and has a healthcare professional role.
     if (!actor) {
       throw createAppError('Authentication required to retrieve professional history', 401);
     }
@@ -448,7 +530,7 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Missing required field: patientUsername', 400);
     }
 
-    // 1.4 Resolve patient and professional identities from trusted repositories
+    // 1.4 Resolve patient and professional identities from trusted repositories.
     const patient = await this.identityRepository.findUserByUsername(patientUsername);
     if (!patient) {
       throw createAppError('Patient not found in identity repository', 404);
@@ -472,7 +554,9 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Authenticated user must have a valid healthcare professional role', 403);
     }
 
-    // 2. Resolve the active delegated permissions for the patient-professional pair
+    // ============================================================================================== //
+
+    // 2. Resolve the active delegated permissions for the patient-professional pair.
     const permissions = await this.fabricPermissionRepository.getActivePermissionsByPatientAndGrantee(
       patientPseudoId,
       professional.id
@@ -483,7 +567,9 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('No active access grant found for this patient and professional', 404);
     }
 
-    // 3. Validate the permission semantics required for delegated history access
+    // ============================================================================================== //
+
+    // 3. Validate the permission semantics required for delegated history access.
     const readablePermissions = normalizedPermissions.filter(
       (permission) => isPermissionActive(permission) && permissionAllowsAction(permission, 'read')
     );
@@ -500,6 +586,9 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('Active delegated permissions are missing permission identifiers', 500);
     }
 
+    // ============================================================================================== //
+
+    // 4. Resolve the effective readable scopes against the active scope catalog.
     const effectiveScopes = getEffectiveScopes(readablePermissions);
 
     if (effectiveScopes.length === 0) {
@@ -515,35 +604,40 @@ class ClinicalRecordOrchestrationService {
       throw createAppError('The active permissions do not reference any active clinical scope', 403);
     }
 
-    // 4. Retrieve the delegated scope materials required for the authorized permissions
-    const scopeMaterials = await this.fabricPermissionRepository.getScopeMaterialsByPermissionIds(permissionIds);
-    const normalizedScopeMaterials = normalizeScopeMaterials(scopeMaterials);
-    const activeScopeMaterials = filterScopeMaterialsByScopes(normalizedScopeMaterials, catalogEffectiveScopes);
+    // ============================================================================================== //
 
-    if (activeScopeMaterials.length === 0) {
-      throw createAppError('No active delegated scope material found for the granted permissions', 403);
-    }
-
-    const capsuleByScope = this.buildScopeCapsuleMap(activeScopeMaterials);
-    const materialScopes = [...new Set(activeScopeMaterials.map((entry) => entry.scopeId))];
-
-    // 5. Retrieve ledger references and keep only the scopes authorized by the active permission
+    // 5. Retrieve ledger references using the professional audit context.
     const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
       patientPseudoId,
       professionalId: professional.id,
       professionalRole,
     });
 
-    const scopedReferences = filterReferencesByScopes(references, materialScopes);
-    const enrichedScopedReferences = this.enrichReferencesWithScopeCapsules(scopedReferences, capsuleByScope);
+    // ============================================================================================== //
 
-    // 6. Retrieve encrypted off-chain records linked to the authorized references
-    const records = enrichedScopedReferences.length
-      ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(enrichedScopedReferences, patientPseudoId)
+    // 6. Resolve requested scopes and keep only authorized ledger references.
+    const requestedScopesInput = payload?.scopeIds || payload?.scopes || catalogEffectiveScopes;
+    const requestedScopes = Array.isArray(requestedScopesInput) && requestedScopesInput.includes('*')
+      ? catalogEffectiveScopes
+      : requestedScopesInput;
+    const authorizedRequestedScopes = validateRequestedScopes(
+      { allowedScopes: catalogEffectiveScopes },
+      requestedScopes
+    ) || requestedScopes;
+    const scopedReferences = filterReferencesByScopes(references, authorizedRequestedScopes);
+
+    // ============================================================================================== //
+
+    // 7. Retrieve encrypted off-chain records linked to the authorized references.
+    const records = scopedReferences.length
+      ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(scopedReferences, patientPseudoId)
       : [];
 
+    // ============================================================================================== //
+
+    // 8. Build a ledger reference map and attach reference metadata to each record.
     const referenceMap = new Map(
-      enrichedScopedReferences
+      scopedReferences
         .map((reference) => [getRecordIdentifier(reference), reference])
         .filter(([recordId]) => Boolean(recordId))
     );
@@ -552,28 +646,66 @@ class ClinicalRecordOrchestrationService {
       mapClinicalRecord(record, referenceMap.get(getRecordIdentifier(record)) || null)
     );
 
-    // 7. Resolve Fabric proxy identifiers into real infrastructure endpoints.
-    const proxyIds = this.extractProxyIdsFromScopeMaterials(activeScopeMaterials);
-    const proxyNodes = await this.proxyNodeService.getProxyNodesByIds(proxyIds);
+    // ============================================================================================== //
 
-    // 8. Resolve the delegated cryptographic material required by the frontend.
-    const delegatedAccessMaterial = await this.proxyReencryptionClient.getDelegatedAccessMaterial({
-      patientPseudoId,
-      granteeId: professional.id,
-      granteeRole: professionalRole,
-      permissionIds,
-      effectiveScopes: materialScopes,
-      scopeMaterials: activeScopeMaterials,
-      proxyNodes,
-      threshold: PRE_THRESHOLD,
-      references: enrichedScopedReferences,
-      records: mappedRecords,
-    });
+    // 9. Resolve the distinct scopes represented by the authorized history.
+    const materialScopes = [...new Set(
+      [
+        ...scopedReferences.map((reference) => reference.scopeId || reference.scope || null),
+        ...mappedRecords.map((record) => record.scopeId || null),
+      ].filter(Boolean)
+    )];
 
+    // ============================================================================================== //
+
+    // 10. Retrieve active ScopeMaterial entries for the authorized scopes.
+    const scopeMaterials = materialScopes.length
+      ? await this.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes(patientPseudoId, materialScopes)
+      : [];
+    const scopeMaterialByScope = this.buildScopeMaterialMap(scopeMaterials);
+
+    // ============================================================================================== //
+
+    // 11. Transform each scope key for the professional and group records by scope.
+    const scopes = await Promise.all(materialScopes.map(async (scopeId) => {
+      const scopeMaterial = scopeMaterialByScope.get(scopeId);
+      if (!scopeMaterial?.encryptedScopeKey) {
+        throw createAppError(`No active ScopeMaterial found for scope ${scopeId}`, 403);
+      }
+
+      const permissionForScope = this.findReadablePermissionForScope(readablePermissions, scopeId);
+      if (!permissionForScope?.permissionId) {
+        throw createAppError(`No active permission found for scope ${scopeId}`, 403);
+      }
+
+      const transformedMaterial = await this.transformScopeKeyWithProxyFallback({
+        permissionId: permissionForScope.permissionId,
+        patientPseudoId,
+        granteeId: professional.id,
+        scopeId,
+        encryptedScopeKey: scopeMaterial.encryptedScopeKey,
+        proxyIds: scopeMaterial.proxyIds,
+      });
+
+      return {
+        scopeId,
+        transformedScopeKey: transformedMaterial.transformedScopeKey,
+        metadata: transformedMaterial.metadata,
+        scopeMaterialId: scopeMaterial.scopeMaterialId,
+        records: mappedRecords.filter((record) => record.scopeId === scopeId),
+      };
+    }));
+
+    // ============================================================================================== //
+
+    // 12. Build the delegated history response.
     return {
+      success: true,
       message: 'Professional history retrieved successfully',
       status: 'success',
       action: 'get_professional_history',
+      patientPseudoId,
+      granteeId: professional.id,
       patient: {
         username: patient.username || patientUsername,
       },
@@ -599,11 +731,8 @@ class ClinicalRecordOrchestrationService {
       })),
       effectiveScopes: materialScopes,
       totalRecords: mappedRecords.length,
+      scopes,
       records: mappedRecords,
-      delegatedAccessMaterial: {
-        scopeMaterials: activeScopeMaterials,
-        ...delegatedAccessMaterial,
-      },
     };
   }
 
@@ -624,6 +753,8 @@ class ClinicalRecordOrchestrationService {
       payload.prescription?.scopeId,
     ].filter(Boolean);
 
+    // ============================================================================================== //
+
     // 2. Resolve the shared validated context once for the whole request.
     const context = await this.resolveClinicalRegistrationContext({
       actor,
@@ -635,6 +766,8 @@ class ClinicalRecordOrchestrationService {
       invalidSignatureMessage: 'Invalid signature for doctor consultation registration',
     });
 
+    // ============================================================================================== //
+
     // 3. Register the root encounter record.
     const encounterRegistration = await this.registerClinicalRecordEvent({
       context,
@@ -643,6 +776,8 @@ class ClinicalRecordOrchestrationService {
     });
 
     const encounterId = encounterRegistration.record.recordId;
+
+    // ============================================================================================== //
 
     // 4. Register optional child records linked to the encounter.
     const labOrderRegistration = payload.labOrder
@@ -669,6 +804,8 @@ class ClinicalRecordOrchestrationService {
         })
       : null;
 
+    // ============================================================================================== //
+
     return {
       message: 'Doctor consultation records registered successfully',
       status: 'success',
@@ -691,6 +828,8 @@ class ClinicalRecordOrchestrationService {
     // 1. Build the explicit signature payload for the lab result request.
     const signaturePayload = buildLaboratoryResultSignaturePayload(payload);
 
+    // ============================================================================================== //
+
     // 2. Resolve the validated shared context.
     const context = await this.resolveClinicalRegistrationContext({
       actor,
@@ -701,6 +840,8 @@ class ClinicalRecordOrchestrationService {
       requestedScopes: [payload.scopeId],
       invalidSignatureMessage: 'Invalid signature for laboratory result registration',
     });
+
+    // ============================================================================================== //
 
     // 3. Resolve the base laboratory order referenced by basedOn.
     const baseRecordContext = await this.resolveBaseClinicalRecord({
@@ -713,6 +854,8 @@ class ClinicalRecordOrchestrationService {
     });
 
     const encounterId = baseRecordContext.record.encounterId || null;
+
+    // ============================================================================================== //
 
     // 4. Register the laboratory result linked to the previous order.
     const registration = await this.registerClinicalRecordEvent({
@@ -730,6 +873,8 @@ class ClinicalRecordOrchestrationService {
         partOf: encounterId || null,
       },
     });
+
+    // ============================================================================================== //
 
     return {
       message: 'Laboratory result registered successfully',
@@ -751,6 +896,8 @@ class ClinicalRecordOrchestrationService {
     // 1. Build the explicit signature payload for the pharmacy request.
     const signaturePayload = buildPharmacyDispatchSignaturePayload(payload);
 
+    // ============================================================================================== //
+
     // 2. Resolve the validated shared context.
     const context = await this.resolveClinicalRegistrationContext({
       actor,
@@ -761,6 +908,8 @@ class ClinicalRecordOrchestrationService {
       requestedScopes: [payload.scopeId],
       invalidSignatureMessage: 'Invalid signature for pharmacy dispatch registration',
     });
+
+    // ============================================================================================== //
 
     // 3. Resolve the base prescription referenced by basedOn.
     const baseRecordContext = await this.resolveBaseClinicalRecord({
@@ -773,6 +922,8 @@ class ClinicalRecordOrchestrationService {
     });
 
     const encounterId = baseRecordContext.record.encounterId || null;
+
+    // ============================================================================================== //
 
     // 4. Register the pharmacy dispatch linked to the prescription.
     const registration = await this.registerClinicalRecordEvent({
@@ -790,6 +941,8 @@ class ClinicalRecordOrchestrationService {
         partOf: encounterId || null,
       },
     });
+
+    // ============================================================================================== //
 
     return {
       message: 'Pharmacy dispatch registered successfully',
@@ -820,142 +973,123 @@ class ClinicalRecordOrchestrationService {
   }
 
   /**
-   * Build a strict scope-to-capsule lookup from active Fabric scope material.
+   * Transform one encrypted scope key using the ScopeMaterial proxyIds in order.
    *
-   * @param {Array<Object>} scopeMaterials - Normalized Fabric scope material.
-   * @returns {Map<string, Object>} Capsule lookup keyed by scopeId.
+   * @param {Object} input - Transform input.
+   * @param {string} input.permissionId - Permission identifier.
+   * @param {string} input.patientPseudoId - Patient pseudo identifier.
+   * @param {string} input.granteeId - Professional identifier.
+   * @param {string} input.scopeId - Scope identifier.
+   * @param {string} input.encryptedScopeKey - Patient-owned encrypted scope key.
+   * @param {string[]} input.proxyIds - Proxy ids stored in ScopeMaterial.
+   * @returns {Promise<Object>} Transformed key material.
    */
-  buildScopeCapsuleMap(scopeMaterials = []) {
-    const capsuleByScope = new Map();
+  async transformScopeKeyWithProxyFallback({
+    permissionId,
+    patientPseudoId,
+    granteeId,
+    scopeId,
+    encryptedScopeKey,
+    proxyIds = [],
+  }) {
+    const normalizedProxyIds = [...new Set((Array.isArray(proxyIds) ? proxyIds : []).filter(Boolean))];
+
+    if (normalizedProxyIds.length === 0) {
+      throw createAppError(`ScopeMaterial for scope ${scopeId} is missing PRE proxy identifiers`, 409);
+    }
+
+    const proxyNodes = await this.proxyNodeService.getProxyNodesByIds(normalizedProxyIds);
+    const failures = [];
+
+    for (const proxyNode of proxyNodes) {
+      try {
+        return await this.preServiceClient.transformScopeKey({
+          baseUrl: proxyNode.endpointUrl,
+          proxyNodeId: proxyNode.id,
+          permissionId,
+          patientPseudoId,
+          granteeId,
+          scopeId,
+          encryptedScopeKey,
+        });
+      } catch (error) {
+        failures.push({
+          proxyNodeId: proxyNode.id,
+          message: error.message,
+        });
+      }
+    }
+
+    const error = createAppError(
+      `Unable to transform scope key for scope ${scopeId} using any assigned PRE proxy`,
+      503,
+      'pre_proxy_fallback_exhausted'
+    );
+    error.details = failures;
+    throw error;
+  }
+
+  /**
+   * Build a lookup of active scope material by scopeId.
+   *
+   * @param {Array<Object>} scopeMaterials - Scope material entries.
+   * @returns {Map<string, Object>} Scope material keyed by scopeId.
+   */
+  buildScopeMaterialMap(scopeMaterials = []) {
+    const materialByScope = new Map();
 
     for (const entry of Array.isArray(scopeMaterials) ? scopeMaterials : []) {
-      const scopeId = entry?.scopeId || entry?.scopeMaterial?.scopeId || null;
-      if (!scopeId) {
-        throw createAppError(
-          'Authorized scope material is missing scopeId required to resolve blockchain capsule',
-          500,
-          'pre_scope_material_invalid'
-        );
+      const material = normalizeScopeMaterial(entry.scopeMaterial || entry);
+      if (!material?.scopeId) {
+        continue;
       }
 
-      const capsule = entry?.scopeMaterial?.capsule ?? entry?.capsule ?? null;
-      if (!capsule) {
-        throw createAppError(
-          `Authorized scope material for scope ${scopeId} is missing blockchain Umbral capsule`,
-          500,
-          'pre_scope_material_capsule_missing'
-        );
+      const status = material.status ? String(material.status).toUpperCase() : 'ACTIVE';
+      if (status === 'ACTIVE') {
+        materialByScope.set(material.scopeId, material);
       }
-
-      capsuleByScope.set(scopeId, this.normalizeSerializedCapsule(capsule, scopeId));
     }
 
-    return capsuleByScope;
+    return materialByScope;
   }
 
   /**
-   * Normalize the serialized capsule shape accepted by the PRE service.
+   * Find a readable permission that authorizes one scope.
    *
-   * @param {*} capsule - Capsule payload from Fabric scope material.
-   * @param {string} scopeId - Scope used in validation errors.
-   * @returns {Object} Normalized serialized capsule.
+   * @param {Array<Object>} permissions - Active readable permissions.
+   * @param {string} scopeId - Scope identifier.
+   * @returns {Object|null} Matching permission.
    */
-  normalizeSerializedCapsule(capsule, scopeId) {
-    if (typeof capsule === 'string') {
-      const value = capsule.trim();
-      if (!value) {
-        throw createAppError(
-          `Authorized scope material for scope ${scopeId} has an empty blockchain Umbral capsule`,
-          500,
-          'pre_scope_material_capsule_invalid'
-        );
-      }
-
-      return {
-        format: 'umbral-capsule/base64',
-        value,
-      };
-    }
-
-    if (capsule && typeof capsule === 'object' && !Array.isArray(capsule)) {
-      const format = typeof capsule.format === 'string' ? capsule.format.trim() : null;
-      const value = typeof capsule.value === 'string' ? capsule.value.trim() : capsule.value;
-
-      if (!format || value === undefined || value === null || value === '') {
-        throw createAppError(
-          `Authorized scope material for scope ${scopeId} has an invalid blockchain Umbral capsule`,
-          500,
-          'pre_scope_material_capsule_invalid'
-        );
-      }
-
-      return {
-        ...capsule,
-        format,
-        value,
-      };
-    }
-
-    throw createAppError(
-      `Authorized scope material for scope ${scopeId} must provide blockchain Umbral capsule as a base64 string or { format, value } object`,
-      500,
-      'pre_scope_material_capsule_invalid'
-    );
+  findReadablePermissionForScope(permissions = [], scopeId) {
+    return permissions.find((permission) => {
+      const allowedScopes = permission.allowedScopes || [];
+      return allowedScopes.includes('*') || allowedScopes.includes(scopeId);
+    }) || null;
   }
 
   /**
-   * Attach blockchain capsules to authorized references by matching scopeId.
+   * Map scope material to the public API shape.
    *
-   * @param {Array<Object>} references - Authorized ledger references.
-   * @param {Map<string, Object>} capsuleByScope - Capsule lookup from Fabric.
-   * @returns {Array<Object>} References enriched with blockchain capsules.
+   * @param {Object} material - Scope material.
+   * @returns {Object|null} Public scope material.
    */
-  enrichReferencesWithScopeCapsules(references = [], capsuleByScope = new Map()) {
-    const missingCapsules = [];
-
-    const enrichedReferences = (Array.isArray(references) ? references : []).map((reference) => {
-      const scopeId = reference?.scopeId || reference?.scope || null;
-      const capsule = scopeId ? capsuleByScope.get(scopeId) : null;
-
-      if (!capsule) {
-        missingCapsules.push(getRecordIdentifier(reference) || scopeId || 'unknown-record');
-      }
-
-      return {
-        ...reference,
-        ...(capsule ? { capsule } : {}),
-      };
-    });
-
-    if (missingCapsules.length > 0) {
-      throw createAppError(
-        `Authorized clinical references are missing blockchain Umbral capsules required for PRE: ${missingCapsules.join(', ')}`,
-        500,
-        'pre_reference_capsule_missing'
-      );
+  mapScopeMaterialForResponse(material) {
+    const normalized = normalizeScopeMaterial(material);
+    if (!normalized) {
+      return null;
     }
 
-    return enrichedReferences;
-  }
-
-  /**
-   * Extract unique PRE proxy node identifiers from active scope material.
-   *
-   * @param {Array<Object>} scopeMaterials - Normalized Fabric scope material.
-   * @returns {string[]} Unique proxy node identifiers.
-   */
-  extractProxyIdsFromScopeMaterials(scopeMaterials = []) {
-    const proxyIds = [...new Set(
-      (Array.isArray(scopeMaterials) ? scopeMaterials : []).flatMap((entry) =>
-        Array.isArray(entry?.scopeMaterial?.proxyIds) ? entry.scopeMaterial.proxyIds.filter(Boolean) : []
-      )
-    )];
-
-    if (proxyIds.length === 0) {
-      throw createAppError('Active delegated scope material is missing PRE proxy node identifiers', 500, 'pre_proxy_ids_missing');
-    }
-
-    return proxyIds;
+    return {
+      scopeMaterialId: normalized.scopeMaterialId,
+      patientPseudoId: normalized.patientPseudoId,
+      scopeId: normalized.scopeId,
+      encryptedScopeKey: normalized.encryptedScopeKey,
+      proxyIds: normalized.proxyIds,
+      status: normalized.status,
+      version: normalized.version,
+      createdAt: normalized.createdAt,
+      metadata: normalized.metadata,
+    };
   }
 }
 

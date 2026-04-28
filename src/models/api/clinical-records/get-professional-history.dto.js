@@ -15,6 +15,7 @@ class GetProfessionalHistoryDTO {
    */
   constructor(payload = {}) {
     this.patientUsername = payload.patientUsername;
+    this.scopeIds = payload.scopeIds || payload.scopes || null;
   }
 
   /**
@@ -28,6 +29,20 @@ class GetProfessionalHistoryDTO {
     }
 
     this.patientUsername = ensureNonEmptyString(this.patientUsername, 'patientUsername');
+
+    if (this.scopeIds !== null && this.scopeIds !== undefined) {
+      const rawScopes = Array.isArray(this.scopeIds)
+        ? this.scopeIds
+        : String(this.scopeIds).split(',');
+
+      this.scopeIds = rawScopes
+        .map((scopeId) => String(scopeId || '').trim())
+        .filter(Boolean);
+
+      if (this.scopeIds.length === 0) {
+        throw createAppError('Field scopeIds must include at least one scope', 400);
+      }
+    }
   }
 
   /**

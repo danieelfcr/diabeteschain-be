@@ -37,15 +37,19 @@ function validateActionsAndScopes(actions, scopes) {
     allowedActions: actions,
     allowedScopes: scopes,
   });
+  const normalizedActions = normalizedCollections.allowedActions.map((action) => action.toLowerCase());
 
-  const invalidActions = normalizedCollections.allowedActions.filter(
+  const invalidActions = normalizedActions.filter(
     (action) => !allowedActions.includes(action)
   );
   if (invalidActions.length > 0) {
     throw createAppError(`Invalid actions: ${invalidActions.join(', ')}`, 400);
   }
 
-  return normalizedCollections;
+  return {
+    allowedActions: normalizedActions,
+    allowedScopes: normalizedCollections.allowedScopes,
+  };
 }
 
 module.exports = {

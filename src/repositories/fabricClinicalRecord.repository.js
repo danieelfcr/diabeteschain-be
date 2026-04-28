@@ -7,6 +7,10 @@ const {
   normalizeClinicalRecordIndex,
   normalizeAuditEvents,
 } = require('../utils/fabricClinicalRecord.utils');
+const {
+  normalizeScopeMaterial,
+  normalizeScopeMaterials,
+} = require('../utils/clinicalRecord.utils');
 
 /**
  * Repository that encapsulates all ledger interactions related to clinical
@@ -135,6 +139,54 @@ class FabricClinicalRecordRepository {
     const result = await this.submitTransaction('RegisterClinicalRecordWithAudit', data);
 
     return normalizeClinicalRecordIndex(result);
+  }
+
+  /**
+   * Retrieve active scope material for one patient scope.
+   *
+   * @param {string} patientPseudoId - Patient pseudo identifier.
+   * @param {string} scopeId - Scope identifier.
+   * @returns {Promise<Object|null>} Active scope material or null.
+   */
+  async getScopeMaterialByPatientAndScope(patientPseudoId, scopeId) {
+    const result = await this.evaluateTransaction(
+      'GetScopeMaterialByPatientAndScope',
+      { patientPseudoId, scopeId }
+    );
+
+    return normalizeScopeMaterial(result);
+  }
+
+  /**
+   * Retrieve active scope materials for one patient and a set of scopes.
+   *
+   * @param {string} patientPseudoId - Patient pseudo identifier.
+   * @param {string[]} scopeIds - Scope identifiers.
+   * @returns {Promise<Array<Object>>} Active scope materials.
+   */
+  async getScopeMaterialsByPatientAndScopes(patientPseudoId, scopeIds = []) {
+    const result = await this.evaluateTransaction(
+      'GetScopeMaterialsByPatientAndScopes',
+      { patientPseudoId, scopeIds }
+    );
+
+    return normalizeScopeMaterials(result).map((entry) => entry.scopeMaterial || entry);
+  }
+
+  /**
+   * Persist persistent encrypted scope material in the ledger.
+   *
+   * @param {Object} data - Scope material payload.
+   * @returns {Promise<Object|null>} Created scope material.
+   */
+  async createScopeMaterial(data) {
+    const result = await this.submitTransaction('CreateScopeMaterial', data);
+    const material = result?.scopeMaterial || result?.data || result;
+
+    return {
+      scopeMaterial: normalizeScopeMaterial(material),
+      txId: result?.txId || null,
+    };
   }
 
   /**

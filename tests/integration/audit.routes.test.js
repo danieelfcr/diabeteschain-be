@@ -38,7 +38,7 @@ describe('Audit routes integration', () => {
         {
           auditId: 'audit-001',
           docType: 'auditEvent',
-          patientId: 'patient-pseudo-001',
+          patientPseudoId: 'patient-pseudo-001',
           actorId: 'doc-001',
           actorRole: 'doctor',
           action: 'READ_CLINICAL_HISTORY',

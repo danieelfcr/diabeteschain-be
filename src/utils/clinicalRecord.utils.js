@@ -72,24 +72,52 @@ function normalizeScopeMaterials(scopeMaterials = []) {
   return scopeMaterials
     .map((entry) => ({
       permissionId: entry.permissionId || null,
-      patientId: entry.patientId || entry.scopeMaterial?.patientId || null,
+      patientPseudoId: entry.patientPseudoId || entry.scopeMaterial?.patientPseudoId || entry.patientId || entry.scopeMaterial?.patientId || null,
       scopeId: entry.scopeId || entry.scopeMaterial?.scopeId || null,
       scopeMaterial: entry.scopeMaterial
         ? {
             docType: entry.scopeMaterial.docType || null,
             scopeMaterialId: entry.scopeMaterial.scopeMaterialId || entry.scopeMaterial.id || null,
-            patientId: entry.scopeMaterial.patientId || null,
+            patientPseudoId: entry.scopeMaterial.patientPseudoId || entry.scopeMaterial.patientId || null,
             scopeId: entry.scopeMaterial.scopeId || null,
-            encKScope: entry.scopeMaterial.enc_k_scope || entry.scopeMaterial.encKScope || null,
-            capsule: entry.scopeMaterial.capsule || entry.capsule || null,
+            encryptedScopeKey: entry.scopeMaterial.encryptedScopeKey
+              || entry.scopeMaterial.enc_k_scope
+              || entry.scopeMaterial.encKScope
+              || null,
             proxyIds: normalizeArray(entry.scopeMaterial.proxyIds),
             version: entry.scopeMaterial.version || null,
             status: entry.scopeMaterial.status || null,
             createdAt: entry.scopeMaterial.createdAt || null,
+            metadata: entry.scopeMaterial.metadata || null,
           }
-        : null,
+        : normalizeScopeMaterial(entry),
     }))
-    .filter((entry) => entry.permissionId && entry.scopeId && entry.scopeMaterial);
+    .filter((entry) => entry.scopeId && entry.scopeMaterial);
+}
+
+/**
+ * Normalize one direct scope material returned by Fabric.
+ *
+ * @param {Object|null|undefined} material - Raw scope material.
+ * @returns {Object|null} Normalized scope material.
+ */
+function normalizeScopeMaterial(material) {
+  if (!material || typeof material !== 'object' || Array.isArray(material)) {
+    return null;
+  }
+
+  return {
+    docType: material.docType || null,
+    scopeMaterialId: material.scopeMaterialId || material.id || null,
+    patientPseudoId: material.patientPseudoId || material.patientId || null,
+    scopeId: material.scopeId || null,
+    encryptedScopeKey: material.encryptedScopeKey || material.enc_k_scope || material.encKScope || null,
+    proxyIds: normalizeArray(material.proxyIds),
+    version: material.version || null,
+    status: material.status || null,
+    createdAt: material.createdAt || null,
+    metadata: material.metadata || null,
+  };
 }
 
 /**
@@ -298,13 +326,15 @@ function buildSignatureRecordPayload(recordInput, recordType) {
     return null;
   }
 
-  return {
+  const payload = {
     recordType,
     scopeId: recordInput.scopeId,
     payloadMetadata: recordInput.payloadMetadata,
     encryption: recordInput.encryption,
     integrity: recordInput.integrity,
   };
+
+  return payload;
 }
 
 /**
@@ -356,11 +386,11 @@ function buildClinicalRecordIndex({ record, context }) {
 
   return {
     recordId: record._id || record.recordId || null,
-    patientId: record.patientPseudoId || context.patientPseudoId,
+    patientPseudoId: record.patientPseudoId || context.patientPseudoId,
     encounterId: record.encounterId || null,
     scopeId: record.scopeId || null,
     recordType: String(record.recordType || '').toLowerCase(),
-    offchainUri: buildOffchainUri(record._id || record.recordId || null),
+    offchainUri: 'mongo://clinical-records/' + (record._id || record.recordId || ''),
     hash: record.integrity?.payloadHash || null,
     createdAt,
     createdBy: context.professional.id || context.actor.id || null,
@@ -377,6 +407,7 @@ module.exports = {
   normalizePermission,
   normalizePermissions,
   normalizeScopeMaterials,
+  normalizeScopeMaterial,
   isPermissionActive,
   getEffectiveScopes,
   filterScopeMaterialsByScopes,

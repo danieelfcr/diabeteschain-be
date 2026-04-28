@@ -5,6 +5,7 @@ const authorizeRoles = require('../middlewares/role.middleware');
 const validateDto = require('../middlewares/validateDto.middleware');
 const GrantAccessDTO = require('../models/api/permissions/grant-access.dto');
 const RevokeAccessDTO = require('../models/api/permissions/revoke-access.dto');
+const ScopeMaterialPreflightDTO = require('../models/api/permissions/scope-material-preflight.dto');
 
 /**
  * Router that exposes access management endpoints for patient-controlled
@@ -23,6 +24,18 @@ const router = express.Router();
  * @type {PermissionController}
  */
 const permissionController = new PermissionController();
+
+/**
+ * POST /permissions/scope-materials/preflight
+ * Resolve which patient-owned scope materials already exist before granting access.
+ */
+router.post(
+  '/scope-materials/preflight',
+  authMiddleware,
+  authorizeRoles('PATIENT'),
+  validateDto(ScopeMaterialPreflightDTO),
+  permissionController.getScopeMaterialPreflight.bind(permissionController)
+);
 
 /**
  * POST /permissions/grants

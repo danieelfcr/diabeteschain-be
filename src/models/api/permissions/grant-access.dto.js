@@ -1,60 +1,76 @@
-/**
- * Data transfer object for access grant requests.
- *
- * It centralizes payload validation and normalization for the grant access
- * use case before the request reaches the controller/service layer.
- */
 const { createAppError } = require('../../../utils/app-error');
 const { ensureNonEmptyString } = require('../user/user.dto.utils');
 
-function isPlainObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function normalizeSerializedCapsule(value, fieldName) {
-  if (typeof value === 'string') {
-    const normalized = value.trim();
-    if (!normalized) {
-      throw createAppError(`Field ${fieldName} must not be empty`, 400);
-    }
-
-    return normalized;
+function normalizeOptionalString(value, fieldName) {
+  if (value === undefined || value === null || value === '') {
+    return null;
   }
 
-  if (isPlainObject(value)) {
-    const format = typeof value.format === 'string' ? value.format.trim() : null;
-    const materialValue = typeof value.value === 'string' ? value.value.trim() : value.value;
+  return ensureNonEmptyString(value, fieldName);
+}
 
-    if (!format || materialValue === undefined || materialValue === null || materialValue === '') {
-      throw createAppError(`Field ${fieldName} must include format and value`, 400);
+function normalizeOptionalObject(value, fieldName) {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createAppError(`Field ${fieldName} must be an object`, 400);
+  }
+
+  return value;
+}
+
+function normalizeTransformKeys(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw createAppError('Missing required field: transformKeys', 400);
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw createAppError(`Field transformKeys[${index}] must be an object`, 400);
+    }
+
+    if (entry.proxyNodeId !== undefined) {
+      throw createAppError(`Field transformKeys[${index}].proxyNodeId is not allowed`, 400);
     }
 
     return {
-      ...value,
-      format,
-      value: materialValue,
+      scopeId: ensureNonEmptyString(entry.scopeId, `transformKeys[${index}].scopeId`),
+      transformKey: ensureNonEmptyString(entry.transformKey, `transformKeys[${index}].transformKey`),
+      transformKeyEncoding: entry.transformKeyEncoding || 'base64',
+      metadata: normalizeOptionalObject(entry.metadata, `transformKeys[${index}].metadata`),
     };
-  }
-
-  throw createAppError(`Field ${fieldName} must be a base64 string or { format, value } object`, 400);
+  });
 }
 
-function normalizeCapsuleByScope(value) {
-  if (!isPlainObject(value)) {
-    throw createAppError('Field capsuleByScope must be an object keyed by scopeId', 400);
+function normalizeScopeMaterials(value) {
+  if (value === undefined || value === null) {
+    return [];
   }
 
-  return Object.entries(value).reduce((normalized, [scopeId, capsule]) => {
-    if (!scopeId || !String(scopeId).trim()) {
-      throw createAppError('Field capsuleByScope contains an empty scopeId', 400);
+  if (!Array.isArray(value)) {
+    throw createAppError('Field scopeMaterials must be an array', 400);
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw createAppError(`Field scopeMaterials[${index}] must be an object`, 400);
     }
 
-    normalized[String(scopeId).trim()] = normalizeSerializedCapsule(
-      capsule,
-      `capsuleByScope.${scopeId}`
-    );
-    return normalized;
-  }, {});
+    return {
+      scopeId: ensureNonEmptyString(entry.scopeId, `scopeMaterials[${index}].scopeId`),
+      encryptedScopeKey: ensureNonEmptyString(
+        entry.encryptedScopeKey || entry.enc_k_scope,
+        `scopeMaterials[${index}].encryptedScopeKey`
+      ),
+      recryptMetadata: normalizeOptionalObject(
+        entry.recryptMetadata,
+        `scopeMaterials[${index}].recryptMetadata`
+      ),
+      metadata: normalizeOptionalObject(entry.metadata, `scopeMaterials[${index}].metadata`),
+    };
+  });
 }
 
 class GrantAccessDTO {
@@ -64,16 +80,21 @@ class GrantAccessDTO {
    * @param {Object} payload - Request payload received from the client.
    */
   constructor(payload = {}) {
-    this.professionalUsername = payload.professionalUsername;
-    this.allowedScopes = payload.allowedScopes;
-    this.allowedActions = payload.allowedActions;
-    this.validFrom = payload.validFrom;
-    this.validTo = payload.validTo;
-    this.signature = payload.signature;
-    this.kfrags = payload.kfrags;
-    this.enc_k_scope = payload.enc_k_scope || payload.encKScope;
-    this.enc_k_scope_by_scope = payload.enc_k_scope_by_scope || payload.encKScopeByScope;
-    this.capsuleByScope = payload.capsuleByScope;
+    const permission = payload.permission && typeof payload.permission === 'object'
+      ? payload.permission
+      : payload;
+
+    this.permissionId = permission.permissionId || payload.permissionId || null;
+    this.professionalUsername = permission.professionalUsername || payload.professionalUsername || null;
+    this.granteeId = permission.granteeId || payload.granteeId || null;
+    this.granteeRole = permission.granteeRole || payload.granteeRole || null;
+    this.allowedScopes = permission.allowedScopes || payload.allowedScopes;
+    this.allowedActions = permission.allowedActions || payload.allowedActions;
+    this.validFrom = permission.validFrom || payload.validFrom;
+    this.validTo = permission.validTo || payload.validTo;
+    this.signature = permission.signature || payload.signature;
+    this.transformKeys = payload.transformKeys || permission.transformKeys;
+    this.scopeMaterials = payload.scopeMaterials || permission.scopeMaterials;
   }
 
   /**
@@ -84,14 +105,11 @@ class GrantAccessDTO {
    */
   validate() {
     const requiredFields = [
-      'professionalUsername',
       'allowedScopes',
       'allowedActions',
       'validFrom',
       'validTo',
       'signature',
-      'kfrags',
-      'capsuleByScope',
     ];
 
     for (const field of requiredFields) {
@@ -100,24 +118,29 @@ class GrantAccessDTO {
       }
     }
 
-    this.professionalUsername = ensureNonEmptyString(
-      this.professionalUsername,
-      'professionalUsername'
-    );
-    this.capsuleByScope = normalizeCapsuleByScope(this.capsuleByScope);
+    if (!this.professionalUsername && !this.granteeId) {
+      throw createAppError('Missing required field: granteeId or professionalUsername', 400);
+    }
 
-    if (Array.isArray(this.allowedScopes)) {
-      const missingCapsuleScopes = this.allowedScopes
-        .filter(Boolean)
-        .filter((scopeId) => !this.capsuleByScope[scopeId]);
+    this.professionalUsername = normalizeOptionalString(this.professionalUsername, 'professionalUsername');
+    this.granteeId = normalizeOptionalString(this.granteeId, 'granteeId');
+    this.granteeRole = normalizeOptionalString(this.granteeRole, 'granteeRole');
+    this.transformKeys = normalizeTransformKeys(this.transformKeys);
+    this.scopeMaterials = normalizeScopeMaterials(this.scopeMaterials);
 
-      if (missingCapsuleScopes.length > 0) {
-        throw createAppError(
-          `Missing capsuleByScope entries for scopes: ${missingCapsuleScopes.join(', ')}`,
-          400,
-          'pre_scope_material_capsule_missing'
-        );
-      }
+    const allowedScopes = Array.isArray(this.allowedScopes)
+      ? this.allowedScopes.map((scopeId) => String(scopeId || '').trim()).filter(Boolean)
+      : [];
+
+    if (allowedScopes.length === 0) {
+      throw createAppError('Field allowedScopes must include at least one scope', 400);
+    }
+
+    const transformKeyScopes = new Set(this.transformKeys.map((entry) => entry.scopeId));
+    const missingScopes = allowedScopes.filter((scopeId) => !transformKeyScopes.has(scopeId));
+
+    if (missingScopes.length > 0) {
+      throw createAppError('A transformKey is required for each allowed scope', 400);
     }
   }
 

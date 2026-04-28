@@ -15,6 +15,27 @@ class PermissionController {
   }
 
   /**
+   * Handle patient scope material preflight requests.
+   *
+   * @param {import('express').Request} req - Express request object.
+   * @param {import('express').Response} res - Express response object.
+   * @param {import('express').NextFunction} next - Express next callback.
+   * @returns {Promise<import('express').Response>} JSON response with the
+   * scope material preflight result.
+   */
+  async getScopeMaterialPreflight(req, res, next) {
+    try {
+      const result = await this.orchestrationService.getScopeMaterialPreflight(
+        req.validatedBody,
+        req.user
+      );
+      return res.status(200).json(result);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
    * Handle access grant requests.
    *
    * @param {import('express').Request} req - Express request object.
