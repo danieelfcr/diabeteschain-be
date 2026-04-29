@@ -107,3 +107,118 @@ describe('ClinicalRecordOrchestrationService PRE proxy fallback', () => {
     expect(result.transformedScopeKey).toBe('transformed-scope-key');
   });
 });
+
+describe('ClinicalRecordOrchestrationService professional history material', () => {
+  it('returns transformed scope material for authorized scopes even when the patient has no records', async () => {
+    const service = new ClinicalRecordOrchestrationService();
+    service.identityRepository = {
+      findUserByUsername: jest.fn(async (username) => {
+        if (username === 'pac') {
+          return {
+            username: 'pac',
+            pseudoId: 'patient-001',
+            role: 'PATIENT',
+          };
+        }
+
+        if (username === 'med') {
+          return {
+            id: 'professional-001',
+            username: 'med',
+            role: 'DOCTOR',
+          };
+        }
+
+        return null;
+      }),
+    };
+    service.fabricPermissionRepository = {
+      getActivePermissionsByPatientAndGrantee: jest.fn().mockResolvedValue([
+        {
+          permissionId: 'permission-001',
+          allowedScopes: ['scope-a', 'scope-b'],
+          allowedActions: ['read', 'write'],
+          validFrom: '2026-01-01T00:00:00.000Z',
+          validTo: '2099-01-01T00:00:00.000Z',
+          status: 'ACTIVE',
+        },
+      ]),
+    };
+    service.scopeCatalogService = {
+      listActiveScopeIds: jest.fn().mockResolvedValue(['scope-a', 'scope-b', 'scope-c']),
+    };
+    service.fabricClinicalRecordRepository = {
+      getPatientRecordIndexesWithAudit: jest.fn().mockResolvedValue([]),
+      getScopeMaterialsByPatientAndScopes: jest.fn().mockResolvedValue([
+        {
+          scopeMaterialId: 'smat-a',
+          patientPseudoId: 'patient-001',
+          scopeId: 'scope-a',
+          encryptedScopeKey: 'encrypted-a',
+          encryptedScopeKeyEncoding: 'base64',
+          proxyIds: ['proxy-a'],
+          status: 'ACTIVE',
+        },
+        {
+          scopeMaterialId: 'smat-b',
+          patientPseudoId: 'patient-001',
+          scopeId: 'scope-b',
+          encryptedScopeKey: 'encrypted-b',
+          encryptedScopeKeyEncoding: 'base64',
+          proxyIds: ['proxy-b'],
+          status: 'ACTIVE',
+        },
+      ]),
+    };
+    service.clinicalRecordRepository = {
+      getClinicalRecordsByReferences: jest.fn(),
+    };
+    service.transformScopeKeyWithProxyFallback = jest.fn(async ({ scopeId }) => ({
+      scopeId,
+      transformedScopeKey: `transformed-${scopeId}`,
+      metadata: {
+        transformedScopeKeyEncoding: 'base64',
+        proxyNodeId: `proxy-${scopeId}`,
+      },
+    }));
+
+    const result = await service.getProfessionalHistory(
+      { patientUsername: 'pac' },
+      { username: 'med', role: 'DOCTOR' }
+    );
+
+    expect(service.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit).toHaveBeenCalledWith({
+      patientPseudoId: 'patient-001',
+      professionalId: 'professional-001',
+      professionalRole: 'DOCTOR',
+    });
+    expect(service.clinicalRecordRepository.getClinicalRecordsByReferences).not.toHaveBeenCalled();
+    expect(service.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes).toHaveBeenCalledWith(
+      'patient-001',
+      ['scope-a', 'scope-b']
+    );
+    expect(service.transformScopeKeyWithProxyFallback).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      action: 'get_professional_history',
+      patientPseudoId: 'patient-001',
+      granteeId: 'professional-001',
+      totalRecords: 0,
+      effectiveScopes: ['scope-a', 'scope-b'],
+      records: [],
+      scopes: [
+        {
+          scopeId: 'scope-a',
+          transformedScopeKey: 'transformed-scope-a',
+          scopeMaterialId: 'smat-a',
+          records: [],
+        },
+        {
+          scopeId: 'scope-b',
+          transformedScopeKey: 'transformed-scope-b',
+          scopeMaterialId: 'smat-b',
+          records: [],
+        },
+      ],
+    });
+  });
+});

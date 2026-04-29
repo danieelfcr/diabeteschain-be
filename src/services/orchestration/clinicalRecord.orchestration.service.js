@@ -648,12 +648,11 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 9. Resolve the distinct scopes represented by the authorized history.
+    // 9. Resolve the distinct authorized scopes that need cryptographic material.
+    // These scopes come from the active permission/request, not only from existing
+    // records, so an authorized professional can create the first clinical event.
     const materialScopes = [...new Set(
-      [
-        ...scopedReferences.map((reference) => reference.scopeId || reference.scope || null),
-        ...mappedRecords.map((record) => record.scopeId || null),
-      ].filter(Boolean)
+      authorizedRequestedScopes.filter(Boolean)
     )];
 
     // ============================================================================================== //
