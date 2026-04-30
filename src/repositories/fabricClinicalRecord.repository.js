@@ -67,13 +67,21 @@ class FabricClinicalRecordRepository {
    * @param {string} input.professionalRole - Authenticated professional role.
    * @returns {Promise<Array<Object>>} Ledger references or metadata.
    */
-  async getPatientRecordIndexesWithAudit({ patientPseudoId, professionalId, professionalRole }) {
+  async getPatientRecordIndexesWithAudit({
+    patientPseudoId,
+    professionalId,
+    professionalRole,
+    allowedScopes = [],
+    allowedRecordTypes = [],
+  }) {
     const result = await this.submitTransaction(
       'GetHistoryByPatientPseudoIdWithAudit',
       {
         patientPseudoId,
         professionalId,
         professionalRole,
+        allowedScopes,
+        allowedRecordTypes,
         auditId: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
       }
@@ -120,6 +128,8 @@ class FabricClinicalRecordRepository {
           patientPseudoId,
           professionalId: professionalContext.professionalId,
           professionalRole: professionalContext.professionalRole,
+          allowedScopes: professionalContext.allowedScopes || [],
+          allowedRecordTypes: professionalContext.allowedRecordTypes || [],
         })
       : await this.getPatientRecordIndexes(patientPseudoId);
 

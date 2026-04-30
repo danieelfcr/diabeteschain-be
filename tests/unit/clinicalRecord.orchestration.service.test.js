@@ -191,6 +191,14 @@ describe('ClinicalRecordOrchestrationService professional history material', () 
       patientPseudoId: 'patient-001',
       professionalId: 'professional-001',
       professionalRole: 'DOCTOR',
+      allowedScopes: ['scope-a', 'scope-b'],
+      allowedRecordTypes: [
+        'ENCOUNTER',
+        'LAB_ORDER',
+        'LAB_RESULT',
+        'MEDICAL_PRESCRIPTION',
+        'PHARMACY_DISPATCH',
+      ],
     });
     expect(service.clinicalRecordRepository.getClinicalRecordsByReferences).not.toHaveBeenCalled();
     expect(service.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes).toHaveBeenCalledWith(
@@ -204,6 +212,13 @@ describe('ClinicalRecordOrchestrationService professional history material', () 
       granteeId: 'professional-001',
       totalRecords: 0,
       effectiveScopes: ['scope-a', 'scope-b'],
+      effectiveRecordTypes: [
+        'ENCOUNTER',
+        'LAB_ORDER',
+        'LAB_RESULT',
+        'MEDICAL_PRESCRIPTION',
+        'PHARMACY_DISPATCH',
+      ],
       records: [],
       scopes: [
         {
@@ -220,5 +235,151 @@ describe('ClinicalRecordOrchestrationService professional history material', () 
         },
       ],
     });
+  });
+
+  it('filters professional history by role-readable record types as well as scopes', async () => {
+    const service = new ClinicalRecordOrchestrationService();
+    service.identityRepository = {
+      findUserByUsername: jest.fn(async (username) => {
+        if (username === 'pac') {
+          return {
+            username: 'pac',
+            pseudoId: 'patient-001',
+            role: 'PATIENT',
+          };
+        }
+
+        if (username === 'farmacia') {
+          return {
+            id: 'professional-001',
+            username: 'farmacia',
+            role: 'PHARMACIST',
+          };
+        }
+
+        return null;
+      }),
+    };
+    service.fabricPermissionRepository = {
+      getActivePermissionsByPatientAndGrantee: jest.fn().mockResolvedValue([
+        {
+          permissionId: 'permission-001',
+          allowedScopes: ['scope-rx'],
+          allowedActions: ['read', 'write'],
+          validFrom: '2026-01-01T00:00:00.000Z',
+          validTo: '2099-01-01T00:00:00.000Z',
+          status: 'ACTIVE',
+        },
+      ]),
+    };
+    service.scopeCatalogService = {
+      listActiveScopeIds: jest.fn().mockResolvedValue(['scope-rx']),
+    };
+    const references = [
+      { recordId: 'enc-001', scopeId: 'scope-rx', recordType: 'ENCOUNTER', status: 'ACTIVE' },
+      { recordId: 'order-001', scopeId: 'scope-rx', recordType: 'LAB_ORDER', status: 'ACTIVE' },
+      { recordId: 'rx-001', scopeId: 'scope-rx', recordType: 'MEDICAL_PRESCRIPTION', status: 'ACTIVE' },
+      { recordId: 'disp-001', scopeId: 'scope-rx', recordType: 'PHARMACY_DISPATCH', status: 'ACTIVE' },
+    ];
+    service.fabricClinicalRecordRepository = {
+      getPatientRecordIndexesWithAudit: jest.fn().mockResolvedValue(references),
+      getScopeMaterialsByPatientAndScopes: jest.fn().mockResolvedValue([
+        {
+          scopeMaterialId: 'smat-rx',
+          patientPseudoId: 'patient-001',
+          scopeId: 'scope-rx',
+          encryptedScopeKey: 'encrypted-rx',
+          encryptedScopeKeyEncoding: 'base64',
+          proxyIds: ['proxy-rx'],
+          status: 'ACTIVE',
+        },
+      ]),
+    };
+    service.clinicalRecordRepository = {
+      getClinicalRecordsByReferences: jest.fn(async (authorizedReferences) =>
+        authorizedReferences.map((reference) => ({
+          _id: reference.recordId,
+          patientPseudoId: 'patient-001',
+          scopeId: reference.scopeId,
+          recordType: reference.recordType,
+        }))
+      ),
+    };
+    service.transformScopeKeyWithProxyFallback = jest.fn(async ({ scopeId }) => ({
+      scopeId,
+      transformedScopeKey: `transformed-${scopeId}`,
+      metadata: {
+        transformedScopeKeyEncoding: 'base64',
+      },
+    }));
+
+    const result = await service.getProfessionalHistory(
+      { patientUsername: 'pac' },
+      { username: 'farmacia', role: 'PHARMACIST' }
+    );
+
+    expect(service.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit).toHaveBeenCalledWith({
+      patientPseudoId: 'patient-001',
+      professionalId: 'professional-001',
+      professionalRole: 'PHARMACIST',
+      allowedScopes: ['scope-rx'],
+      allowedRecordTypes: ['MEDICAL_PRESCRIPTION', 'PHARMACY_DISPATCH'],
+    });
+    expect(service.clinicalRecordRepository.getClinicalRecordsByReferences).toHaveBeenCalledWith(
+      [
+        { recordId: 'rx-001', scopeId: 'scope-rx', recordType: 'MEDICAL_PRESCRIPTION', status: 'ACTIVE' },
+        { recordId: 'disp-001', scopeId: 'scope-rx', recordType: 'PHARMACY_DISPATCH', status: 'ACTIVE' },
+      ],
+      'patient-001'
+    );
+    expect(result.records.map((record) => record.recordType)).toEqual([
+      'MEDICAL_PRESCRIPTION',
+      'PHARMACY_DISPATCH',
+    ]);
+    expect(result.effectiveRecordTypes).toEqual(['MEDICAL_PRESCRIPTION', 'PHARMACY_DISPATCH']);
+  });
+});
+
+describe('ClinicalRecordOrchestrationService record type policy', () => {
+  it('rejects writes outside the professional role policy', async () => {
+    const service = new ClinicalRecordOrchestrationService();
+
+    await expect(service.registerClinicalRecordEvent({
+      context: {
+        professionalRole: 'LABORATORY',
+        permission: {
+          allowedScopes: ['scope-001'],
+        },
+        patientPseudoId: 'patient-001',
+        professional: {
+          id: 'professional-001',
+        },
+        actor: {
+          id: 'professional-001',
+        },
+      },
+      recordType: 'MEDICAL_PRESCRIPTION',
+      recordInput: {
+        scopeId: 'scope-001',
+      },
+    })).rejects.toThrow('LABORATORY role cannot register MEDICAL_PRESCRIPTION records');
+  });
+
+  it('rejects linked base records that the professional role cannot read', async () => {
+    const service = new ClinicalRecordOrchestrationService();
+    service.clinicalRecordRepository = {
+      findById: jest.fn(),
+    };
+
+    await expect(service.resolveBaseClinicalRecord({
+      patientPseudoId: 'patient-001',
+      recordId: 'order-001',
+      expectedRecordType: 'LAB_ORDER',
+      label: 'Laboratory order',
+      professionalId: 'professional-001',
+      professionalRole: 'PHARMACIST',
+    })).rejects.toThrow('PHARMACIST role cannot read LAB_ORDER records');
+
+    expect(service.clinicalRecordRepository.findById).not.toHaveBeenCalled();
   });
 });
