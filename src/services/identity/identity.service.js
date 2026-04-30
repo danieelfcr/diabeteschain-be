@@ -20,6 +20,8 @@ class IdentityService {
    * @returns {Object} Sanitized user object without secret data.
    */
   sanitizeUser(user) {
+    const organization = user.professional?.organization || null;
+
     return {
       id: user.id,
       pseudoId: user.pseudoId,
@@ -27,6 +29,13 @@ class IdentityService {
       email: user.email,
       role: user.role?.name || null,
       professionalId: user.professionalId,
+      organizationId: user.organizationId,
+      organization: organization
+        ? {
+            id: organization.id,
+            name: organization.name,
+          }
+        : null,
       status: user.status?.name || null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -45,6 +54,7 @@ class IdentityService {
       role: user.role || null,
       pseudoId: user.pseudoId || null,
       professionalId: user.professionalId || null,
+      organizationId: user.organizationId || null,
       email: user.email || null,
       username: user.username || null,
     };
@@ -93,7 +103,7 @@ class IdentityService {
    * @throws {Error} When validation or persistence fails.
    */
   async registerUser(userData) {
-    const { role, professionalId, email, password, ...otherFields } = userData;
+    const { role, professionalId, organizationId, email, password, ...otherFields } = userData;
 
     // Validate that the provided role is permitted for registration.
     const allowedRoles = ['PATIENT', 'DOCTOR', 'PHARMACIST', 'LABORATORY'];
@@ -101,14 +111,34 @@ class IdentityService {
       throw new Error('Invalid role. Allowed roles: PATIENT, DOCTOR, PHARMACIST, LABORATORY');
     }
 
-    // Assign a pseudoId only for patients; other roles must provide a professional identifier.
-    let pseudoId = null;
+    // Assign a pseudoId only for patients; other roles must provide professional profile data.
+    let profileData = {};
     if (role === 'PATIENT') {
-      pseudoId = crypto.randomUUID();
+      profileData = {
+        patient: {
+          pseudoId: crypto.randomUUID(),
+        },
+      };
     } else {
       if (!professionalId) {
         throw new Error('professionalId is required for non-PATIENT roles');
       }
+
+      if (!organizationId) {
+        throw new Error('organizationId is required for non-PATIENT roles');
+      }
+
+      const organization = await this.repository.findOrganizationById(organizationId);
+      if (!organization) {
+        throw new Error('Organization not found');
+      }
+
+      profileData = {
+        professional: {
+          professionalId,
+          organizationId: organization.id,
+        },
+      };
     }
 
     // Ensure the email address is not already used by another account.
@@ -137,8 +167,6 @@ class IdentityService {
     // Compose the payload to persist a new user.
     const newUserData = {
       ...otherFields,
-      pseudoId,
-      professionalId: role === 'PATIENT' ? null : professionalId,
       email,
       passwordHash,
       roleId,
@@ -146,8 +174,21 @@ class IdentityService {
     };
 
     // Persist the user record and return the resulting object.
-    const user = await this.repository.createUser(newUserData);
+    const user = await this.repository.createUser(newUserData, profileData);
     return user;
+  }
+
+  /**
+   * Retrieve the healthcare organization catalog for registration flows.
+   *
+   * @returns {Promise<Array<Object>>} Sanitized organization catalog.
+   */
+  async listOrganizations() {
+    const organizations = await this.repository.listOrganizations();
+    return organizations.map((organization) => ({
+      id: organization.id,
+      name: organization.name,
+    }));
   }
 
   /**

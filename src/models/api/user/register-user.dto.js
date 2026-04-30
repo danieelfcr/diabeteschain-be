@@ -20,6 +20,7 @@ class RegisterUserDTO {
     this.secondLastName = payload.secondLastName;
     this.role = payload.role;
     this.professionalId = payload.professionalId;
+    this.organizationId = payload.organizationId;
     this.publicKey = payload.publicKey;
     this.encryptedPrivateKeyByPassword = payload.encryptedPrivateKeyByPassword;
     this.passwordKdfSalt = payload.passwordKdfSalt;
@@ -58,6 +59,10 @@ class RegisterUserDTO {
 
     if (this.professionalId !== undefined && this.professionalId !== null) {
       this.professionalId = ensureNonEmptyString(this.professionalId, 'professionalId');
+    }
+
+    if (this.organizationId !== undefined && this.organizationId !== null) {
+      this.organizationId = ensureNonEmptyString(this.organizationId, 'organizationId');
     }
   }
 

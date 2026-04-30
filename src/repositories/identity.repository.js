@@ -1,6 +1,25 @@
 const crypto = require('crypto');
-const { User, Role, Status } = require('../models/persistence/user.schema');
+const {
+  sequelize,
+  User,
+  Role,
+  Status,
+  Organization,
+  Patient,
+  Professional,
+} = require('../models/persistence/user.schema');
 const { serializeCanonicalPayload } = require('../utils/signatureCanonicalization');
+
+const userProfileIncludes = [
+  { model: Role, as: 'role' },
+  { model: Status, as: 'status' },
+  { model: Patient, as: 'patient' },
+  {
+    model: Professional,
+    as: 'professional',
+    include: [{ model: Organization, as: 'organization' }],
+  },
+];
 
 /**
  * Repository class for identity-related persistence operations.
@@ -8,27 +27,77 @@ const { serializeCanonicalPayload } = require('../utils/signatureCanonicalizatio
  */
 class IdentityRepository {
   /**
-   * Create a new user record in the database and return it with related role and status.
+   * Create a new user record and its role-specific identity profile.
    *
    * @param {Object} userData - The user payload to persist.
+   * @param {Object} profileData - Patient or professional profile payload.
+   * @param {Object} [profileData.patient] - Patient profile data.
+   * @param {Object} [profileData.professional] - Professional profile data.
    * @returns {Promise<Object>} The created user with role and status associations.
    * @throws {Error} When database creation fails.
    */
-  async createUser(userData) {
+  async createUser(userData, profileData = {}) {
     try {
-      const user = await User.create(userData);
+      return await sequelize.transaction(async (transaction) => {
+        const user = await User.create(userData, { transaction });
 
-      // Retrieve the newly created record with associated role and status metadata.
-      const createdUser = await User.findByPk(user.id, {
-        include: [
-          { model: Role, as: 'role' },
-          { model: Status, as: 'status' }
-        ]
+        if (profileData.patient) {
+          await Patient.create(
+            {
+              userId: user.id,
+              pseudoId: profileData.patient.pseudoId,
+            },
+            { transaction }
+          );
+        }
+
+        if (profileData.professional) {
+          await Professional.create(
+            {
+              userId: user.id,
+              professionalId: profileData.professional.professionalId,
+              organizationId: profileData.professional.organizationId,
+            },
+            { transaction }
+          );
+        }
+
+        return await User.findByPk(user.id, {
+          include: userProfileIncludes,
+          transaction,
+        });
       });
-
-      return createdUser;
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Retrieve all available healthcare organizations.
+   *
+   * @returns {Promise<Array<Object>>} Organization catalog records.
+   */
+  async listOrganizations() {
+    try {
+      return await Organization.findAll({
+        order: [['name', 'ASC']],
+      });
+    } catch (error) {
+      throw new Error(`Error listing organizations: ${error.message}`);
+    }
+  }
+
+  /**
+   * Find an organization by its stable identifier.
+   *
+   * @param {string} organizationId - Organization identifier.
+   * @returns {Promise<Object|null>} Matching organization or null.
+   */
+  async findOrganizationById(organizationId) {
+    try {
+      return await Organization.findByPk(organizationId);
+    } catch (error) {
+      throw new Error(`Error finding organization by id: ${error.message}`);
     }
   }
 
@@ -58,10 +127,7 @@ class IdentityRepository {
     try {
       const user = await User.findOne({
         where: { email },
-        include: [
-          { model: Role, as: 'role' },
-          { model: Status, as: 'status' }
-        ]
+        include: userProfileIncludes,
       });
       return user;
     } catch (error) {
@@ -79,7 +145,7 @@ class IdentityRepository {
   async findUserById(id) {
     try {
       return await User.findByPk(id, {
-        include: [{ model: Role, as: 'role' }],
+        include: userProfileIncludes,
       });
     } catch (error) {
       throw new Error(`Error finding user by id: ${error.message}`);
@@ -96,8 +162,21 @@ class IdentityRepository {
   async findUserByPseudoId(pseudoId) {
     try {
       return await User.findOne({
-        where: { pseudoId },
-        include: [{ model: Role, as: 'role' }],
+        include: [
+          { model: Role, as: 'role' },
+          { model: Status, as: 'status' },
+          {
+            model: Patient,
+            as: 'patient',
+            where: { pseudoId },
+            required: true,
+          },
+          {
+            model: Professional,
+            as: 'professional',
+            include: [{ model: Organization, as: 'organization' }],
+          },
+        ],
       });
     } catch (error) {
       throw new Error(`Error finding user by pseudo id: ${error.message}`);
@@ -115,7 +194,7 @@ class IdentityRepository {
     try {
       return await User.findOne({
         where: { username },
-        include: [{ model: Role, as: 'role' }],
+        include: userProfileIncludes,
       });
     } catch (error) {
       throw new Error(`Error finding user by username: ${error.message}`);

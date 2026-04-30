@@ -26,19 +26,13 @@ class IdentityController {
     try {
       const payload = req.validatedBody || RegisterUserDTO.from(req.body);
       const user = await this.identityService.registerUser(payload);
+      const sanitizedUser = this.identityService.sanitizeUser(user);
 
       return res.status(201).json({
         message: 'User registered successfully',
         user: {
-          id: user.id,
-          pseudoId: user.pseudoId,
-          professionalId: user.professionalId,
-          username: user.username,
-          email: user.email,
+          ...sanitizedUser,
           firstName: user.firstName,
-          role: user.role.name,
-          status: user.status.name,
-          createdAt: user.createdAt,
         }
       });
     } catch (error) {
@@ -59,6 +53,8 @@ class IdentityController {
       if (
         error.message.includes('Invalid role')
         || error.message.includes('professionalId is required')
+        || error.message.includes('organizationId is required')
+        || error.message.includes('Organization not found')
       ) {
         error.statusCode = 400;
       }
@@ -86,6 +82,25 @@ class IdentityController {
         accessToken,
         expiresIn: securityConfig.jwt.accessExpiresIn,
         user,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * Retrieve the organization catalog used by professional registration.
+   *
+   * @param {import('express').Request} req - The express request object.
+   * @param {import('express').Response} res - The express response object.
+   * @returns {Promise<void>} Sends a JSON response.
+   */
+  async getOrganizations(req, res, next) {
+    try {
+      const organizations = await this.identityService.listOrganizations();
+
+      return res.status(200).json({
+        organizations,
       });
     } catch (error) {
       return next(error);

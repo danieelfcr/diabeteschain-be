@@ -1,7 +1,13 @@
-const { sequelize, Role, Status } = require('../models/persistence/user.schema');
+const { sequelize, Role, Status, Organization } = require('../models/persistence/user.schema');
 
 const defaultRoles = ['PATIENT', 'DOCTOR', 'LABORATORY', 'PHARMACIST', 'ADMIN'];
 const defaultStatuses = ['ACTIVE', 'INACTIVE', 'SUSPENDED'];
+const defaultOrganizations = [
+  { id: 'hospital-general', name: 'Hospital General' },
+  { id: 'clinica-diabeteschain', name: 'Clinica DiabetesChain' },
+  { id: 'laboratorio-central', name: 'Laboratorio Central' },
+  { id: 'farmacia-central', name: 'Farmacia Central' },
+];
 
 const seedIdentityCatalogs = async () => {
   for (const roleName of defaultRoles) {
@@ -10,6 +16,18 @@ const seedIdentityCatalogs = async () => {
 
   for (const statusName of defaultStatuses) {
     await Status.findOrCreate({ where: { name: statusName } });
+  }
+
+  for (const organization of defaultOrganizations) {
+    const [record] = await Organization.findOrCreate({
+      where: { id: organization.id },
+      defaults: { name: organization.name },
+    });
+
+    if (record.name !== organization.name) {
+      record.name = organization.name;
+      await record.save();
+    }
   }
 };
 
@@ -39,5 +57,6 @@ const initializeIdentityDatabase = async (options = {}) => {
 module.exports = {
   initializeIdentityDatabase,
   seedIdentityCatalogs,
+  defaultOrganizations,
   sequelize,
 };
