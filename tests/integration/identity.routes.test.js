@@ -119,6 +119,21 @@ describe('Identity routes integration', () => {
       expect(persistedUser.passwordHash).not.toBe('StrongPassword123!');
     });
 
+    it('debe registrar un paciente sin segundo nombre', async () => {
+      const payload = buildRegisterPayload();
+      delete payload.middleName;
+
+      const response = await request(app)
+        .post('/auth/register')
+        .send(payload);
+
+      expect(response.status).toBe(201);
+
+      const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
+      expect(persistedUser).not.toBeNull();
+      expect(persistedUser.middleName).toBeNull();
+    });
+
     it('debe generar pseudoId automaticamente si role = PATIENT', async () => {
       const response = await request(app)
         .post('/auth/register')

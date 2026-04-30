@@ -151,7 +151,7 @@ const User = sequelize.define(
     },
     middleName: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       field: 'middle_name',
     },
     firstLastName: {

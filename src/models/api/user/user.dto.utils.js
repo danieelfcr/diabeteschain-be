@@ -44,7 +44,33 @@ function ensureNonEmptyString(value, fieldName, options = {}) {
   return normalizedValue;
 }
 
+/**
+ * Normalize an optional string field.
+ *
+ * @param {*} value - Value to validate.
+ * @param {string} fieldName - Field name for error messages.
+ * @param {Object} [options] - Validation options.
+ * @param {boolean} [options.trim=true] - Whether to trim the string.
+ * @returns {string|null} Normalized string or null when omitted/empty.
+ * @throws {Error} When the value is not a string.
+ */
+function ensureOptionalString(value, fieldName, options = {}) {
+  const { trim = true } = options;
+
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw createAppError(`Field ${fieldName} must be a string`, 400);
+  }
+
+  const normalizedValue = trim ? value.trim() : value;
+  return normalizedValue || null;
+}
+
 module.exports = {
   ensureRequired,
   ensureNonEmptyString,
+  ensureOptionalString,
 };

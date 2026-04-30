@@ -1,4 +1,4 @@
-const { ensureNonEmptyString } = require('./user.dto.utils');
+const { ensureNonEmptyString, ensureOptionalString } = require('./user.dto.utils');
 
 /**
  * DTO for the identity user registration flow.
@@ -38,7 +38,7 @@ class RegisterUserDTO {
     this.password = ensureNonEmptyString(this.password, 'password', { trim: false });
     this.cuiHash = ensureNonEmptyString(this.cuiHash, 'cuiHash', { trim: false });
     this.firstName = ensureNonEmptyString(this.firstName, 'firstName');
-    this.middleName = ensureNonEmptyString(this.middleName, 'middleName');
+    this.middleName = ensureOptionalString(this.middleName, 'middleName');
     this.firstLastName = ensureNonEmptyString(this.firstLastName, 'firstLastName');
     this.secondLastName = ensureNonEmptyString(this.secondLastName, 'secondLastName');
     this.role = ensureNonEmptyString(this.role, 'role');
