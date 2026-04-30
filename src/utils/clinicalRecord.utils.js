@@ -1,5 +1,9 @@
 const crypto = require('crypto');
 const { createAppError } = require('./app-error');
+const {
+  normalizeAccessRecordType,
+  normalizeRecordTypeList,
+} = require('./clinicalAccessPolicy.utils');
 
 /**
  * Normalize any scalar or array-like value into a clean array.
@@ -42,8 +46,11 @@ function normalizePermission(permission) {
 
   return {
     permissionId: permission.permissionId || permission.id || null,
+    granteeRole: permission.granteeRole || null,
     allowedScopes: normalizeArray(permission.allowedScopes),
     allowedActions: normalizeArray(permission.allowedActions),
+    allowedReadRecordTypes: normalizeRecordTypeList(permission.allowedReadRecordTypes),
+    allowedWriteRecordTypes: normalizeRecordTypeList(permission.allowedWriteRecordTypes),
     validFrom: permission.validFrom || null,
     validTo: permission.validTo || null,
     status: permission.status || permission.permissionStatus || null,
@@ -203,6 +210,25 @@ function filterReferencesByScopes(references = [], effectiveScopes = []) {
   return references.filter((reference) => {
     const scopeId = reference.scopeId || reference.scope || null;
     return effectiveScopes.includes(scopeId);
+  });
+}
+
+/**
+ * Keep only references that belong to the effective clinical record types.
+ *
+ * @param {Array<Object>} references - Ledger references.
+ * @param {string[]} effectiveRecordTypes - Authorized record types.
+ * @returns {Array<Object>} Filtered references.
+ */
+function filterReferencesByRecordTypes(references = [], effectiveRecordTypes = []) {
+  const normalizedRecordTypes = normalizeRecordTypeList(effectiveRecordTypes);
+  if (normalizedRecordTypes.length === 0) {
+    return [];
+  }
+
+  return references.filter((reference) => {
+    const recordType = normalizeAccessRecordType(reference.recordType || reference.type || null);
+    return normalizedRecordTypes.includes(recordType);
   });
 }
 
@@ -416,6 +442,7 @@ module.exports = {
   getEffectiveScopes,
   filterScopeMaterialsByScopes,
   filterReferencesByScopes,
+  filterReferencesByRecordTypes,
   normalizeRecordType,
   getLedgerAuthorRole,
   toPlainObject,

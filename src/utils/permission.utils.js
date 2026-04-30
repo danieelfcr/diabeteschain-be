@@ -46,6 +46,10 @@ function validateActionsAndScopes(actions, scopes) {
     throw createAppError(`Invalid actions: ${invalidActions.join(', ')}`, 400);
   }
 
+  if (normalizedActions.includes('write') && !normalizedActions.includes('read')) {
+    throw createAppError('Write access must include read access', 400);
+  }
+
   return {
     allowedActions: normalizedActions,
     allowedScopes: normalizedCollections.allowedScopes,

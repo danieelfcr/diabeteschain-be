@@ -10,6 +10,9 @@ const {
   buildGrantAccessSignaturePayload,
   buildRevokeAccessSignaturePayload,
 } = require('../../utils/signaturePayload.utils');
+const {
+  getAllowedRecordTypesForRoleActions,
+} = require('../../utils/clinicalAccessPolicy.utils');
 const { normalizeScopeMaterial } = require('../../utils/clinicalRecord.utils');
 const { createAppError } = require('../../utils/app-error');
 
@@ -111,6 +114,7 @@ class PermissionOrchestrationService {
       payload.allowedScopes
     );
     const allowedScopes = await this.scopeCatalogService.assertActiveScopeIds(requestedScopes);
+    const recordTypeAccess = getAllowedRecordTypesForRoleActions(granteeRole, allowedActions);
     this.validateTransformKeysForScopes(payload.transformKeys, allowedScopes);
 
     // ============================================================================================== //
@@ -161,6 +165,8 @@ class PermissionOrchestrationService {
       granteeRole: granteeRole,
       allowedActions,
       allowedScopes,
+      allowedReadRecordTypes: recordTypeAccess.allowedReadRecordTypes,
+      allowedWriteRecordTypes: recordTypeAccess.allowedWriteRecordTypes,
       validFrom,
       validTo,
       createdBy: patientPseudoId,
@@ -217,6 +223,7 @@ class PermissionOrchestrationService {
       permissionTxId: permissionResult?.txId || null,
       transformKeysRegistered,
       scopeMaterials,
+      recordTypeAccess,
       patient: {
         username: patient.username,
       },

@@ -16,6 +16,7 @@ const {
   isPermissionActive,
   getEffectiveScopes,
   filterReferencesByScopes,
+  filterReferencesByRecordTypes,
   normalizeRecordType,
   getLedgerAuthorRole,
   toPlainObject,
@@ -24,6 +25,11 @@ const {
   buildClinicalRecordDocument,
   buildClinicalRecordIndex,
 } = require('../../utils/clinicalRecord.utils');
+const {
+  normalizeAccessRecordType,
+  getEffectiveRecordTypesForAction,
+  isRecordTypeAllowedForRoleAction,
+} = require('../../utils/clinicalAccessPolicy.utils');
 const {
   buildDoctorConsultationSignaturePayload,
   buildLaboratoryResultSignaturePayload,
@@ -244,7 +250,21 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 2. Retrieve and validate the off-chain base record.
+    // 2. Enforce that the professional role can read the base record type
+    // before using it as clinical context for a linked event.
+    if (
+      professionalRole
+      && !isRecordTypeAllowedForRoleAction(professionalRole, 'read', expectedRecordType)
+    ) {
+      throw createAppError(
+        `${professionalRole} role cannot read ${normalizeAccessRecordType(expectedRecordType)} records`,
+        403
+      );
+    }
+
+    // ============================================================================================== //
+
+    // 3. Retrieve and validate the off-chain base record.
     const baseRecord = await this.clinicalRecordRepository.findById(recordId);
     if (!baseRecord) {
       throw createAppError(`${label} not found`, 404);
@@ -260,7 +280,7 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 3. Retrieve the matching blockchain index, including audit context when available.
+    // 4. Retrieve the matching blockchain index, including audit context when available.
     const baseReference = await this.fabricClinicalRecordRepository.getClinicalRecordIndexByRecordId(
       patientPseudoId,
       recordId,
@@ -268,6 +288,8 @@ class ClinicalRecordOrchestrationService {
         ? {
             professionalId,
             professionalRole,
+            allowedScopes: [baseRecord.scopeId].filter(Boolean),
+            allowedRecordTypes: [expectedRecordType],
           }
         : null
     );
@@ -278,7 +300,7 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 4. Validate that the blockchain index matches the expected type and remains active.
+    // 5. Validate that the blockchain index matches the expected type and remains active.
     const referenceRecordType = normalizeRecordType(baseReference.recordType);
     if (referenceRecordType && referenceRecordType !== expectedRecordType) {
       throw createAppError(`${label} blockchain index does not match the expected record type`, 400);
@@ -347,6 +369,13 @@ class ClinicalRecordOrchestrationService {
     const recordInput = options.recordInput || null;
     if (!recordInput) {
       throw createAppError('Clinical record payload is required', 400);
+    }
+
+    if (!isRecordTypeAllowedForRoleAction(context.professionalRole, 'write', options.recordType)) {
+      throw createAppError(
+        `${context.professionalRole} role cannot register ${normalizeAccessRecordType(options.recordType)} records`,
+        403
+      );
     }
 
     // 1. Validate the target scope against the active permission.
@@ -606,16 +635,7 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 5. Retrieve ledger references using the professional audit context.
-    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
-      patientPseudoId,
-      professionalId: professional.id,
-      professionalRole,
-    });
-
-    // ============================================================================================== //
-
-    // 6. Resolve requested scopes and keep only authorized ledger references.
+    // 5. Resolve requested scopes against the readable permission set.
     const requestedScopesInput = payload?.scopeIds || payload?.scopes || catalogEffectiveScopes;
     const requestedScopes = Array.isArray(requestedScopesInput) && requestedScopesInput.includes('*')
       ? catalogEffectiveScopes
@@ -624,18 +644,51 @@ class ClinicalRecordOrchestrationService {
       { allowedScopes: catalogEffectiveScopes },
       requestedScopes
     ) || requestedScopes;
-    const scopedReferences = filterReferencesByScopes(references, authorizedRequestedScopes);
 
     // ============================================================================================== //
 
-    // 7. Retrieve encrypted off-chain records linked to the authorized references.
+    // 6. Resolve the readable clinical record types from role policy and permission metadata.
+    const effectiveReadRecordTypes = getEffectiveRecordTypesForAction(
+      readablePermissions,
+      professionalRole,
+      'read'
+    );
+
+    if (effectiveReadRecordTypes.length === 0) {
+      throw createAppError('The active permissions do not grant readable record types for this role', 403);
+    }
+
+    // ============================================================================================== //
+
+    // 7. Retrieve ledger references using the professional audit context and
+    // the same scope/type filters enforced by the service layer.
+    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
+      patientPseudoId,
+      professionalId: professional.id,
+      professionalRole,
+      allowedScopes: authorizedRequestedScopes,
+      allowedRecordTypes: effectiveReadRecordTypes,
+    });
+
+    // ============================================================================================== //
+
+    // 8. Keep only authorized ledger references even if a downstream contract
+    // or legacy environment returns a wider set.
+    const scopedReferences = filterReferencesByRecordTypes(
+      filterReferencesByScopes(references, authorizedRequestedScopes),
+      effectiveReadRecordTypes
+    );
+
+    // ============================================================================================== //
+
+    // 9. Retrieve encrypted off-chain records linked to the authorized references.
     const records = scopedReferences.length
       ? await this.clinicalRecordRepository.getClinicalRecordsByReferences(scopedReferences, patientPseudoId)
       : [];
 
     // ============================================================================================== //
 
-    // 8. Build a ledger reference map and attach reference metadata to each record.
+    // 10. Build a ledger reference map and attach reference metadata to each record.
     const referenceMap = new Map(
       scopedReferences
         .map((reference) => [getRecordIdentifier(reference), reference])
@@ -648,17 +701,16 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 9. Resolve the distinct scopes represented by the authorized history.
+    // 11. Resolve the distinct authorized scopes that need cryptographic material.
+    // These scopes come from the active permission/request, not only from existing
+    // records, so an authorized professional can create the first clinical event.
     const materialScopes = [...new Set(
-      [
-        ...scopedReferences.map((reference) => reference.scopeId || reference.scope || null),
-        ...mappedRecords.map((record) => record.scopeId || null),
-      ].filter(Boolean)
+      authorizedRequestedScopes.filter(Boolean)
     )];
 
     // ============================================================================================== //
 
-    // 10. Retrieve active ScopeMaterial entries for the authorized scopes.
+    // 12. Retrieve active ScopeMaterial entries for the authorized scopes.
     const scopeMaterials = materialScopes.length
       ? await this.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes(patientPseudoId, materialScopes)
       : [];
@@ -666,7 +718,7 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 11. Transform each scope key for the professional and group records by scope.
+    // 13. Transform each scope key for the professional and group records by scope.
     const scopes = await Promise.all(materialScopes.map(async (scopeId) => {
       const scopeMaterial = scopeMaterialByScope.get(scopeId);
       if (!scopeMaterial?.encryptedScopeKey) {
@@ -699,7 +751,7 @@ class ClinicalRecordOrchestrationService {
 
     // ============================================================================================== //
 
-    // 12. Build the delegated history response.
+    // 14. Build the delegated history response.
     return {
       success: true,
       message: 'Professional history retrieved successfully',
@@ -719,6 +771,8 @@ class ClinicalRecordOrchestrationService {
             permissionId: readablePermissions[0].permissionId,
             allowedScopes: readablePermissions[0].allowedScopes,
             allowedActions: readablePermissions[0].allowedActions,
+            allowedReadRecordTypes: readablePermissions[0].allowedReadRecordTypes,
+            allowedWriteRecordTypes: readablePermissions[0].allowedWriteRecordTypes,
             validFrom: readablePermissions[0].validFrom,
             validTo: readablePermissions[0].validTo,
           }
@@ -727,10 +781,13 @@ class ClinicalRecordOrchestrationService {
         permissionId: permission.permissionId,
         allowedScopes: permission.allowedScopes,
         allowedActions: permission.allowedActions,
+        allowedReadRecordTypes: permission.allowedReadRecordTypes,
+        allowedWriteRecordTypes: permission.allowedWriteRecordTypes,
         validFrom: permission.validFrom,
         validTo: permission.validTo,
       })),
       effectiveScopes: materialScopes,
+      effectiveRecordTypes: effectiveReadRecordTypes,
       totalRecords: mappedRecords.length,
       scopes,
       records: mappedRecords,
