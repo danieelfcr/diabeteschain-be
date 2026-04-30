@@ -49,6 +49,7 @@ const buildRegisterPayload = (overrides = {}) => ({
   email: 'patient@example.com',
   password: 'StrongPassword123!',
   cuiHash: 'cui-hash-001',
+  birthDate: '1990-01-15',
   firstName: 'Ana',
   middleName: 'Maria',
   firstLastName: 'Lopez',

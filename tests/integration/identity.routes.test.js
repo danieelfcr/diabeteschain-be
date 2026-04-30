@@ -21,6 +21,7 @@ const buildRegisterPayload = (overrides = {}) => ({
   email: 'patient@example.com',
   password: 'StrongPassword123!',
   cuiHash: 'cui-hash-001',
+  birthDate: '1990-01-15',
   firstName: 'Ana',
   middleName: 'Maria',
   firstLastName: 'Lopez',
@@ -60,6 +61,7 @@ const createUser = async (overrides = {}) => {
     email: overrides.email || `${uniqueValue('user')}@example.com`,
     passwordHash: passwordHash,
     cuiHash: overrides.cuiHash || uniqueValue('cui'),
+    birthDate: overrides.birthDate || '1990-01-15',
     firstName: overrides.firstName || 'Test',
     middleName: overrides.middleName || 'Middle',
     firstLastName: overrides.firstLastName || 'User',
@@ -116,6 +118,7 @@ describe('Identity routes integration', () => {
 
       const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
       expect(persistedUser).not.toBeNull();
+      expect(persistedUser.birthDate).toBe('1990-01-15');
       expect(persistedUser.passwordHash).not.toBe('StrongPassword123!');
     });
 
@@ -132,6 +135,45 @@ describe('Identity routes integration', () => {
       const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
       expect(persistedUser).not.toBeNull();
       expect(persistedUser.middleName).toBeNull();
+    });
+
+    it('debe fallar con 400 si no recibe fecha de nacimiento', async () => {
+      const payload = buildRegisterPayload();
+      delete payload.birthDate;
+
+      const response = await request(app)
+        .post('/auth/register')
+        .send(payload);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('birthDate');
+    });
+
+    it('debe fallar con 400 si recibe una fecha de nacimiento invalida', async () => {
+      const response = await request(app)
+        .post('/auth/register')
+        .send(buildRegisterPayload({ birthDate: '1990-02-31' }));
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('birthDate');
+    });
+
+    it('debe fallar con 400 si el username tiene menos de 3 caracteres', async () => {
+      const response = await request(app)
+        .post('/auth/register')
+        .send(buildRegisterPayload({ username: 'ab' }));
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('username');
+    });
+
+    it('debe fallar con 400 si el username tiene mas de 30 caracteres', async () => {
+      const response = await request(app)
+        .post('/auth/register')
+        .send(buildRegisterPayload({ username: 'a'.repeat(31) }));
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('username');
     });
 
     it('debe generar pseudoId automaticamente si role = PATIENT', async () => {

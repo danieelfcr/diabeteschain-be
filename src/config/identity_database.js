@@ -27,9 +27,16 @@ const seedIdentityCatalogs = async () => {
   }
 };
 
-const ensureUserOptionalColumns = async () => {
+const ensureUserSchemaColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
   const usersTable = await queryInterface.describeTable('users');
+
+  if (!usersTable.birth_date) {
+    await queryInterface.addColumn('users', 'birth_date', {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    });
+  }
 
   if (usersTable.middle_name && usersTable.middle_name.allowNull === false) {
     await queryInterface.changeColumn('users', 'middle_name', {
@@ -53,7 +60,7 @@ const initializeIdentityDatabase = async (options = {}) => {
     await sequelize.sync({ force });
     console.log('Identity Database synchronized successfully');
 
-    await ensureUserOptionalColumns();
+    await ensureUserSchemaColumns();
     await seedIdentityCatalogs();
 
     console.log('Catalogs initialized successfully');

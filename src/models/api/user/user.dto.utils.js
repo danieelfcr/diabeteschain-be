@@ -45,6 +45,31 @@ function ensureNonEmptyString(value, fieldName, options = {}) {
 }
 
 /**
+ * Ensure a normalized string has an accepted length.
+ *
+ * @param {string} value - Normalized string to validate.
+ * @param {string} fieldName - Field name for error messages.
+ * @param {Object} options - Validation options.
+ * @param {number} [options.min] - Minimum accepted length.
+ * @param {number} [options.max] - Maximum accepted length.
+ * @returns {string} The original string when length is valid.
+ * @throws {Error} When the length is outside the accepted range.
+ */
+function ensureStringLength(value, fieldName, options = {}) {
+  const { min, max } = options;
+
+  if (typeof min === 'number' && value.length < min) {
+    throw createAppError(`Field ${fieldName} must be at least ${min} characters`, 400);
+  }
+
+  if (typeof max === 'number' && value.length > max) {
+    throw createAppError(`Field ${fieldName} must be at most ${max} characters`, 400);
+  }
+
+  return value;
+}
+
+/**
  * Normalize an optional string field.
  *
  * @param {*} value - Value to validate.
@@ -69,8 +94,42 @@ function ensureOptionalString(value, fieldName, options = {}) {
   return normalizedValue || null;
 }
 
+/**
+ * Ensure a field is a valid date-only value.
+ *
+ * @param {*} value - Value to validate.
+ * @param {string} fieldName - Field name for error messages.
+ * @returns {string} Normalized date in YYYY-MM-DD format.
+ * @throws {Error} When the value is missing or not a real date.
+ */
+function ensureDateOnlyString(value, fieldName) {
+  const normalizedValue = ensureNonEmptyString(value, fieldName);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalizedValue);
+
+  if (!match) {
+    throw createAppError(`Field ${fieldName} must use YYYY-MM-DD date format`, 400);
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw createAppError(`Field ${fieldName} must be a valid date`, 400);
+  }
+
+  return normalizedValue;
+}
+
 module.exports = {
   ensureRequired,
   ensureNonEmptyString,
+  ensureStringLength,
   ensureOptionalString,
+  ensureDateOnlyString,
 };
