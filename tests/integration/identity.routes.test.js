@@ -3,7 +3,13 @@ const bcrypt = require('bcrypt');
 const request = require('supertest');
 
 const app = require('../../src/app');
-const { User, Role, Status } = require('../../src/models/persistence/user.schema');
+const {
+  User,
+  Role,
+  Status,
+  Patient,
+  Professional,
+} = require('../../src/models/persistence/user.schema');
 const {
   initializeTestDatabase,
   resetTestDatabase,
@@ -49,7 +55,7 @@ const createUser = async (overrides = {}) => {
   const statusId = await getStatusId(statusName);
   const passwordHash = await bcrypt.hash(password, 10);
 
-  return User.create({
+  const user = await User.create({
     username: overrides.username || uniqueValue('user'),
     email: overrides.email || `${uniqueValue('user')}@example.com`,
     passwordHash: passwordHash,
@@ -60,10 +66,6 @@ const createUser = async (overrides = {}) => {
     secondLastName: overrides.secondLastName || 'Lastname',
     roleId: roleId,
     statusId: statusId,
-    pseudoId:
-      overrides.pseudoId === undefined ? (roleName === 'PATIENT' ? crypto.randomUUID() : null) : overrides.pseudoId,
-    professionalId:
-      overrides.professionalId === undefined ? (roleName === 'PATIENT' ? null : uniqueValue('PRO')) : overrides.professionalId,
     publicKey: overrides.publicKey === undefined ? 'public-key-value' : overrides.publicKey,
     encryptedPrivateKeyByPassword: overrides.encryptedPrivateKeyByPassword || 'enc-private-password',
     passwordKdfSalt: overrides.passwordKdfSalt || 'password-salt',
@@ -71,6 +73,21 @@ const createUser = async (overrides = {}) => {
     recoveryKdfSalt: overrides.recoveryKdfSalt || 'recovery-salt',
     recoveryKeyHash: overrides.recoveryKeyHash || uniqueValue('recovery'),
   });
+
+  if (roleName === 'PATIENT') {
+    await Patient.create({
+      userId: user.id,
+      pseudoId: overrides.pseudoId === undefined ? crypto.randomUUID() : overrides.pseudoId,
+    });
+  } else {
+    await Professional.create({
+      userId: user.id,
+      professionalId: overrides.professionalId === undefined ? uniqueValue('PRO') : overrides.professionalId,
+      organizationId: overrides.organizationId || 'hospital-general',
+    });
+  }
+
+  return user;
 };
 
 beforeAll(async () => {
@@ -111,8 +128,10 @@ describe('Identity routes integration', () => {
       expect(response.body.user.pseudoId).toEqual(expect.stringMatching(/^[0-9a-f-]{36}$/i));
 
       const persistedUser = await User.findOne({ where: { email: 'patient@example.com' } });
-      expect(persistedUser.pseudoId).toBe(response.body.user.pseudoId);
-      expect(persistedUser.professionalId).toBeNull();
+      const persistedPatient = await Patient.findOne({ where: { userId: persistedUser.id } });
+      const persistedProfessional = await Professional.findOne({ where: { userId: persistedUser.id } });
+      expect(persistedPatient.pseudoId).toBe(response.body.user.pseudoId);
+      expect(persistedProfessional).toBeNull();
     });
 
     it('debe registrar correctamente un profesional con professionalId', async () => {
@@ -125,17 +144,25 @@ describe('Identity routes integration', () => {
             cuiHash: 'cui-hash-002',
             role: 'DOCTOR',
             professionalId: 'COL-12345',
+            organizationId: 'hospital-general',
             recoveryKeyHash: 'recovery-hash-002',
           })
         );
 
       expect(response.status).toBe(201);
       expect(response.body.user.professionalId).toBe('COL-12345');
+      expect(response.body.user.organization).toEqual({
+        id: 'hospital-general',
+        name: 'Hospital General',
+      });
       expect(response.body.user.role).toBe('DOCTOR');
 
       const persistedUser = await User.findOne({ where: { email: 'doctor@example.com' } });
-      expect(persistedUser.professionalId).toBe('COL-12345');
-      expect(persistedUser.pseudoId).toBeNull();
+      const persistedProfessional = await Professional.findOne({ where: { userId: persistedUser.id } });
+      const persistedPatient = await Patient.findOne({ where: { userId: persistedUser.id } });
+      expect(persistedProfessional.professionalId).toBe('COL-12345');
+      expect(persistedProfessional.organizationId).toBe('hospital-general');
+      expect(persistedPatient).toBeNull();
     });
 
     it('debe fallar con 400 si el profesional no envia professionalId', async () => {
@@ -144,6 +171,7 @@ describe('Identity routes integration', () => {
         email: 'lab@example.com',
         cuiHash: 'cui-hash-003',
         role: 'LABORATORY',
+        organizationId: 'laboratorio-central',
         recoveryKeyHash: 'recovery-hash-003',
       });
 
@@ -155,6 +183,24 @@ describe('Identity routes integration', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('professionalId is required');
+    });
+
+    it('debe fallar con 400 si el profesional no envia organizationId', async () => {
+      const response = await request(app)
+        .post('/auth/register')
+        .send(
+          buildRegisterPayload({
+            username: 'pharmacy_user',
+            email: 'pharmacy@example.com',
+            cuiHash: 'cui-hash-006',
+            role: 'PHARMACIST',
+            professionalId: 'FAR-12345',
+            recoveryKeyHash: 'recovery-hash-006',
+          })
+        );
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('organizationId is required');
     });
 
     it('debe fallar con 409 si el email ya existe', async () => {
@@ -266,6 +312,20 @@ describe('Identity routes integration', () => {
       expect(response.status).toBe(200);
       expect(response.body.accessToken).toEqual(expect.any(String));
       expect(response.body.user.passwordHash).toBeUndefined();
+    });
+  });
+
+  describe('GET /auth/organizations', () => {
+    it('debe retornar el catalogo de organizaciones', async () => {
+      const response = await request(app).get('/auth/organizations');
+
+      expect(response.status).toBe(200);
+      expect(response.body.organizations).toEqual(
+        expect.arrayContaining([
+          { id: 'hospital-general', name: 'Hospital General' },
+          { id: 'laboratorio-central', name: 'Laboratorio Central' },
+        ])
+      );
     });
   });
 

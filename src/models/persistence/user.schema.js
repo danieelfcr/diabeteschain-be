@@ -67,6 +67,8 @@ const Status = sequelize.define(
 /**
  * User model representing identity domain users.
  * Includes personal information, authentication metadata, and references to role/status.
+ * Patient/professional profile identifiers live in dedicated 1:1 tables and
+ * are exposed through virtual fields to preserve the existing application contract.
  */
 const User = sequelize.define(
   'User',
@@ -77,16 +79,46 @@ const User = sequelize.define(
       primaryKey: true,
     },
     pseudoId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      unique: true,
-      field: 'pseudo_id',
+      type: DataTypes.VIRTUAL,
+      get() {
+        const directValue = this.getDataValue('pseudoId');
+        if (directValue !== undefined) {
+          return directValue;
+        }
+
+        return this.patient?.pseudoId || null;
+      },
+      set(value) {
+        this.setDataValue('pseudoId', value);
+      },
     },
     professionalId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      unique: true,
-      field: 'professional_id',
+      type: DataTypes.VIRTUAL,
+      get() {
+        const directValue = this.getDataValue('professionalId');
+        if (directValue !== undefined) {
+          return directValue;
+        }
+
+        return this.professional?.professionalId || null;
+      },
+      set(value) {
+        this.setDataValue('professionalId', value);
+      },
+    },
+    organizationId: {
+      type: DataTypes.VIRTUAL,
+      get() {
+        const directValue = this.getDataValue('organizationId');
+        if (directValue !== undefined) {
+          return directValue;
+        }
+
+        return this.professional?.organizationId || null;
+      },
+      set(value) {
+        this.setDataValue('organizationId', value);
+      },
     },
     username: {
       type: DataTypes.STRING,
@@ -188,7 +220,96 @@ const User = sequelize.define(
   }
 );
 
-// Define associations between user, role, and status models.
+/**
+ * Minimal catalog table for healthcare organizations.
+ */
+const Organization = sequelize.define(
+  'Organization',
+  {
+    id: {
+      type: DataTypes.STRING,
+      primaryKey: true,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+  },
+  {
+    tableName: 'organizations',
+    timestamps: false,
+  }
+);
+
+/**
+ * Patient-specific identity profile.
+ */
+const Patient = sequelize.define(
+  'Patient',
+  {
+    userId: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+      field: 'user_id',
+    },
+    pseudoId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      field: 'pseudo_id',
+    },
+  },
+  {
+    tableName: 'patients',
+    timestamps: false,
+  }
+);
+
+/**
+ * Healthcare-professional identity profile.
+ */
+const Professional = sequelize.define(
+  'Professional',
+  {
+    userId: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+      field: 'user_id',
+    },
+    professionalId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      field: 'professional_id',
+    },
+    organizationId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      references: {
+        model: 'organizations',
+        key: 'id',
+      },
+      field: 'organization_id',
+    },
+  },
+  {
+    tableName: 'professionals',
+    timestamps: false,
+  }
+);
+
+// Define associations between user, role, status, and profile models.
 User.belongsTo(Role, {
   foreignKey: 'roleId',
   as: 'role',
@@ -209,9 +330,44 @@ Status.hasMany(User, {
   as: 'users',
 });
 
+User.hasOne(Patient, {
+  foreignKey: 'userId',
+  as: 'patient',
+  onDelete: 'CASCADE',
+});
+
+Patient.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
+User.hasOne(Professional, {
+  foreignKey: 'userId',
+  as: 'professional',
+  onDelete: 'CASCADE',
+});
+
+Professional.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
+Professional.belongsTo(Organization, {
+  foreignKey: 'organizationId',
+  as: 'organization',
+});
+
+Organization.hasMany(Professional, {
+  foreignKey: 'organizationId',
+  as: 'professionals',
+});
+
 module.exports = {
   sequelize,
   User,
   Role,
   Status,
+  Organization,
+  Patient,
+  Professional,
 };

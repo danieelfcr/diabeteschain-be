@@ -28,6 +28,12 @@ router.post(
 );
 
 /**
+ * GET /auth/organizations
+ * Retrieve the healthcare organization catalog used during professional registration.
+ */
+router.get('/organizations', identityController.getOrganizations.bind(identityController));
+
+/**
  * GET /auth/users/:username/public-key
  * Retrieve the public key of a professional user by username.
  *

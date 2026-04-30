@@ -81,3 +81,4 @@ data/
 # Scope catalog constants
 scopeCatalog.constants.js
 proxyNode.constants.js
+identityOrganizations.constants.js
