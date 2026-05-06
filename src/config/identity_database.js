@@ -1,3 +1,4 @@
+const { DataTypes } = require('sequelize');
 const { sequelize, Role, Status, Organization } = require('../models/persistence/user.schema');
 const { DEFAULT_IDENTITY_ORGANIZATIONS } = require('../constants/identityOrganizations.constants');
 
@@ -26,6 +27,25 @@ const seedIdentityCatalogs = async () => {
   }
 };
 
+const ensureUserSchemaColumns = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  const usersTable = await queryInterface.describeTable('users');
+
+  if (!usersTable.birth_date) {
+    await queryInterface.addColumn('users', 'birth_date', {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    });
+  }
+
+  if (usersTable.middle_name && usersTable.middle_name.allowNull === false) {
+    await queryInterface.changeColumn('users', 'middle_name', {
+      type: DataTypes.STRING,
+      allowNull: true,
+    });
+  }
+};
+
 /**
  * Initialize the identity database and ensure required catalog entries exist.
  *
@@ -40,6 +60,7 @@ const initializeIdentityDatabase = async (options = {}) => {
     await sequelize.sync({ force });
     console.log('Identity Database synchronized successfully');
 
+    await ensureUserSchemaColumns();
     await seedIdentityCatalogs();
 
     console.log('Catalogs initialized successfully');

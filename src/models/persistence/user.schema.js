@@ -121,9 +121,12 @@ const User = sequelize.define(
       },
     },
     username: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(30),
       allowNull: false,
       unique: true,
+      validate: {
+        len: [3, 30],
+      },
     },
     email: {
       type: DataTypes.STRING,
@@ -144,6 +147,11 @@ const User = sequelize.define(
       unique: true,
       field: 'cui_hash',
     },
+    birthDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      field: 'birth_date',
+    },
     firstName: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -151,7 +159,7 @@ const User = sequelize.define(
     },
     middleName: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       field: 'middle_name',
     },
     firstLastName: {

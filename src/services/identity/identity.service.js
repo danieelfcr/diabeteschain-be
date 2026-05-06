@@ -27,6 +27,7 @@ class IdentityService {
       pseudoId: user.pseudoId,
       username: user.username,
       email: user.email,
+      birthDate: user.birthDate || null,
       role: user.role?.name || null,
       professionalId: user.professionalId,
       organizationId: user.organizationId,

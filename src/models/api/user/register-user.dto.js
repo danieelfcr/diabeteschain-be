@@ -1,4 +1,9 @@
-const { ensureNonEmptyString } = require('./user.dto.utils');
+const {
+  ensureDateOnlyString,
+  ensureNonEmptyString,
+  ensureOptionalString,
+  ensureStringLength,
+} = require('./user.dto.utils');
 
 /**
  * DTO for the identity user registration flow.
@@ -14,6 +19,7 @@ class RegisterUserDTO {
     this.email = payload.email;
     this.password = payload.password;
     this.cuiHash = payload.cuiHash;
+    this.birthDate = payload.birthDate;
     this.firstName = payload.firstName;
     this.middleName = payload.middleName;
     this.firstLastName = payload.firstLastName;
@@ -33,12 +39,16 @@ class RegisterUserDTO {
    * Validate and normalize the minimum registration contract.
    */
   validate() {
-    this.username = ensureNonEmptyString(this.username, 'username');
+    this.username = ensureStringLength(ensureNonEmptyString(this.username, 'username'), 'username', {
+      min: 3,
+      max: 30,
+    });
     this.email = ensureNonEmptyString(this.email, 'email');
     this.password = ensureNonEmptyString(this.password, 'password', { trim: false });
     this.cuiHash = ensureNonEmptyString(this.cuiHash, 'cuiHash', { trim: false });
+    this.birthDate = ensureDateOnlyString(this.birthDate, 'birthDate');
     this.firstName = ensureNonEmptyString(this.firstName, 'firstName');
-    this.middleName = ensureNonEmptyString(this.middleName, 'middleName');
+    this.middleName = ensureOptionalString(this.middleName, 'middleName');
     this.firstLastName = ensureNonEmptyString(this.firstLastName, 'firstLastName');
     this.secondLastName = ensureNonEmptyString(this.secondLastName, 'secondLastName');
     this.role = ensureNonEmptyString(this.role, 'role');
