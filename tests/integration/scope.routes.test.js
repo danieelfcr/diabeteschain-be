@@ -57,7 +57,7 @@ describe('Scope routes integration', () => {
     const response = await request(app).get('/scopes');
 
     expect(response.status).toBe(401);
-    expect(response.body.error).toBe('Authentication token is required');
+    expect(response.body.error).toBe('Se requiere un token de autenticación.');
     expect(mockListActiveScopes).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,7 @@ module.exports = (error, req, res, next) => {
   // Unhandled errors default to the standard internal server error status.
   const statusCode = error.statusCode || 500;
   return res.status(statusCode).json({
-    error: error.message || 'Internal server error',
+    error: translateErrorMessage(error.message || '', statusCode),
   });
 };
+const { translateErrorMessage } = require('../utils/errorMessageTranslator');

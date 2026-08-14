@@ -87,7 +87,7 @@ describe('Audit routes integration', () => {
     const response = await request(app).get('/audit/me');
 
     expect(response.status).toBe(401);
-    expect(response.body.error).toBe('Authentication token is required');
+    expect(response.body.error).toBe('Se requiere un token de autenticación.');
     expect(mockGetMyAuditEvents).not.toHaveBeenCalled();
   });
 
@@ -103,7 +103,7 @@ describe('Audit routes integration', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Forbidden for current role');
+    expect(response.body.error).toBe('No tienes permisos para realizar esta acción con tu rol actual.');
     expect(mockGetMyAuditEvents).not.toHaveBeenCalled();
   });
 });

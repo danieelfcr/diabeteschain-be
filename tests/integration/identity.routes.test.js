@@ -239,7 +239,7 @@ describe('Identity routes integration', () => {
         .send(payload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('professionalId is required');
+      expect(response.body.error).toBe('El ID profesional es obligatorio para los roles que no son pacientes.');
     });
 
     it('debe fallar con 400 si el profesional no envia organizationId', async () => {
@@ -257,7 +257,7 @@ describe('Identity routes integration', () => {
         );
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('organizationId is required');
+      expect(response.body.error).toBe('La organización es obligatoria para los roles que no son pacientes.');
     });
 
     it('debe fallar con 409 si el email ya existe', async () => {
@@ -272,7 +272,7 @@ describe('Identity routes integration', () => {
       });
 
       expect(response.status).toBe(409);
-      expect(response.body.error).toBe('Email already exists');
+      expect(response.body.error).toBe('Ya existe una cuenta registrada con este correo electrónico.');
     });
 
     it('debe guardar password hasheada, no en texto plano', async () => {
@@ -338,7 +338,7 @@ describe('Identity routes integration', () => {
         .send({ email: 'missing@example.com', password: 'StrongPassword123!' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toBe('Invalid credentials');
+      expect(response.body.error).toBe('Las credenciales son inválidas.');
     });
 
     it('debe retornar 401 si la contrasena es incorrecta', async () => {
@@ -349,7 +349,7 @@ describe('Identity routes integration', () => {
         .send({ email: 'patient@example.com', password: 'WrongPassword123!' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error).toBe('Invalid credentials');
+      expect(response.body.error).toBe('Las credenciales son inválidas.');
     });
 
     it('debe retornar 403 si el usuario no esta ACTIVE', async () => {
@@ -367,7 +367,7 @@ describe('Identity routes integration', () => {
         .send({ email: 'inactive@example.com', password: 'StrongPassword123!' });
 
       expect(response.status).toBe(403);
-      expect(response.body.error).toBe('User is inactive or blocked');
+      expect(response.body.error).toBe('El usuario está inactivo o bloqueado.');
     });
 
     it('no debe retornar passwordHash', async () => {
@@ -420,7 +420,7 @@ describe('Identity routes integration', () => {
       const response = await request(app).get('/auth/users/missing_doctor/public-key');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('User not found');
+      expect(response.body.error).toBe('Usuario no encontrado.');
     });
 
     it('debe retornar 404 si el usuario existe pero no tiene publicKey', async () => {
@@ -435,7 +435,7 @@ describe('Identity routes integration', () => {
       const response = await request(app).get(`/auth/users/${user.username}/public-key`);
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Public key not found for this user');
+      expect(response.body.error).toBe('No se encontró una llave pública para este usuario.');
     });
   });
 
@@ -462,7 +462,7 @@ describe('Identity routes integration', () => {
       const response = await request(app).get('/auth/patients/missing_patient/public-key');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('User not found');
+      expect(response.body.error).toBe('Usuario no encontrado.');
     });
 
     it('debe retornar 404 si el paciente existe pero no tiene publicKey', async () => {
@@ -477,7 +477,7 @@ describe('Identity routes integration', () => {
       const response = await request(app).get(`/auth/patients/${user.username}/public-key`);
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Public key not found for this user');
+      expect(response.body.error).toBe('No se encontró una llave pública para este usuario.');
     });
   });
 });

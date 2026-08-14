@@ -81,7 +81,7 @@ describe('JWT authentication integration', () => {
     const response = await request(app).get('/clinical-records/history/me');
 
     expect(response.status).toBe(401);
-    expect(response.body.error).toBe('Authentication token is required');
+    expect(response.body.error).toBe('Se requiere un token de autenticación.');
   });
 
   it('debe responder 401 si un endpoint protegido recibe un Bearer token invalido', async () => {
@@ -90,7 +90,7 @@ describe('JWT authentication integration', () => {
       .set('Authorization', 'Bearer invalid-token');
 
     expect(response.status).toBe(401);
-    expect(response.body.error).toBe('Invalid authentication token');
+    expect(response.body.error).toBe('El token de autenticación no es válido.');
   });
 
   it('debe permitir acceso con un token valido y poblar req.user', async () => {

@@ -111,7 +111,7 @@ describe('Role authorization integration', () => {
       .send(buildGrantPayload());
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Forbidden for current role');
+    expect(response.body.error).toBe('No tienes permisos para realizar esta acción con tu rol actual.');
   });
 
   it('permite que un PATIENT llame POST /permissions/scope-materials/preflight', async () => {
@@ -143,7 +143,7 @@ describe('Role authorization integration', () => {
       .send({ scopeIds: ['scope-001'] });
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Forbidden for current role');
+    expect(response.body.error).toBe('No tienes permisos para realizar esta acción con tu rol actual.');
   });
 
   it('rechaza con 403 un token valido con rol incorrecto en una ruta protegida por rol', async () => {
@@ -158,7 +158,7 @@ describe('Role authorization integration', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(403);
-    expect(response.body.error).toBe('Forbidden for current role');
+    expect(response.body.error).toBe('No tienes permisos para realizar esta acción con tu rol actual.');
   });
 
   it.each(['DOCTOR', 'PATIENT'])(
@@ -177,7 +177,7 @@ describe('Role authorization integration', () => {
         .send(buildClinicalPayload());
 
       expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Forbidden for current role');
+      expect(response.body.error).toBe('No tienes permisos para realizar esta acción con tu rol actual.');
     }
   );
 
@@ -197,7 +197,7 @@ describe('Role authorization integration', () => {
         .send(buildClinicalPayload());
 
       expect(response.status).toBe(403);
-      expect(response.body.error).toBe('Forbidden for current role');
+      expect(response.body.error).toBe('No tienes permisos para realizar esta acción con tu rol actual.');
     }
   );
 });
