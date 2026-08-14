@@ -1,0 +1,21 @@
+{
+  "name": "diabeteschain-load-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "k6 load tests for DiabetesChain backend thesis metrics.",
+  "scripts": {
+    "setup": "node scripts/setup-test-data.js",
+    "smoke": "k6 run scripts/smoke.js",
+    "write:e1": "k6 run -e SCENARIO=E1 -e TOTAL_RECORDS=50 -e VUS=5 --summary-export results/write_E1_50.json scripts/write-load.js",
+    "write:e2": "k6 run -e SCENARIO=E2 -e TOTAL_RECORDS=100 -e VUS=10 --summary-export results/write_E2_100.json scripts/write-load.js",
+    "write:e3": "k6 run -e SCENARIO=E3 -e TOTAL_RECORDS=500 -e VUS=20 --summary-export results/write_E3_500.json scripts/write-load.js",
+    "write:e4": "k6 run -e SCENARIO=E4 -e TOTAL_RECORDS=1000 -e VUS=30 --summary-export results/write_E4_1000.json scripts/write-load.js",
+    "write:e5": "k6 run -e SCENARIO=E5 -e TOTAL_RECORDS=2000 -e VUS=50 --summary-export results/write_E5_2000.json scripts/write-load.js",
+    "read:e1": "k6 run -e SCENARIO=E1 -e TOTAL_READS=50 -e VUS=5 --summary-export results/read_E1_50.json scripts/read-load.js",
+    "read:e2": "k6 run -e SCENARIO=E2 -e TOTAL_READS=100 -e VUS=10 --summary-export results/read_E2_100.json scripts/read-load.js",
+    "read:e3": "k6 run -e SCENARIO=E3 -e TOTAL_READS=500 -e VUS=20 --summary-export results/read_E3_500.json scripts/read-load.js",
+    "read:e4": "k6 run -e SCENARIO=E4 -e TOTAL_READS=1000 -e VUS=30 --summary-export results/read_E4_1000.json scripts/read-load.js",
+    "read:e5": "k6 run -e SCENARIO=E5 -e TOTAL_READS=2000 -e VUS=50 --summary-export results/read_E5_2000.json scripts/read-load.js"
+  }
+}
+

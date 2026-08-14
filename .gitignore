@@ -77,6 +77,8 @@ build/
 
 # Data
 data/
+load-tests/results/*
+!load-tests/results/.gitkeep
 
 # Scope catalog constants
 scopeCatalog.constants.js

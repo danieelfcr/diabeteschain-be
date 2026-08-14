@@ -91,24 +91,32 @@ describe('ProxyNodeService', () => {
     expect(selected.map((node) => node.id)).toEqual(['proxy-a', 'proxy-b']);
   });
 
-  it('seeds the localhost PRE proxy with an encrypted base URL', async () => {
+  it('seeds the localhost PRE proxies with encrypted base URLs', async () => {
     proxyNodeRepository.upsert.mockResolvedValue(null);
 
     const service = new ProxyNodeService();
     const seededCount = await service.seedDefaultProxyNodes();
 
-    expect(seededCount).toBe(1);
-    expect(proxyNodeRepository.upsert).toHaveBeenCalledTimes(1);
+    expect(seededCount).toBe(2);
+    expect(proxyNodeRepository.upsert).toHaveBeenCalledTimes(2);
 
-    const persistedProxyNode = proxyNodeRepository.upsert.mock.calls[0][0];
+    const persistedProxyNodes = proxyNodeRepository.upsert.mock.calls.map(([node]) => node);
 
-    expect(persistedProxyNode).toMatchObject({
-      id: '00000000-0000-4000-8000-000000004100',
-      status: 'ACTIVE',
+    expect(persistedProxyNodes.map((node) => node.id)).toEqual([
+      '00000000-0000-4000-8000-000000004100',
+      '00000000-0000-4000-8000-000000004101',
+    ]);
+    expect(persistedProxyNodes.every((node) => node.status === 'ACTIVE')).toBe(true);
+
+    const decryptedBaseUrls = persistedProxyNodes.map((node) => {
+      expect(node.encryptedBaseUrl).toEqual(expect.any(String));
+      expect(node.encryptedBaseUrl).not.toContain('localhost');
+      return decryptProxyNodeBaseUrl(node.encryptedBaseUrl);
     });
-    expect(persistedProxyNode.encryptedBaseUrl).toEqual(expect.any(String));
-    expect(persistedProxyNode.encryptedBaseUrl).not.toContain('localhost');
-    expect(decryptProxyNodeBaseUrl(persistedProxyNode.encryptedBaseUrl))
-      .toBe('http://localhost:4100/');
+
+    expect(decryptedBaseUrls).toEqual([
+      'http://localhost:4100/',
+      'http://localhost:4101/',
+    ]);
   });
 });

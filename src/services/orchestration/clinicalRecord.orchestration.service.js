@@ -74,6 +74,19 @@ class ClinicalRecordOrchestrationService {
   }
 
   /**
+   * Allow local load tests to exercise the MongoDB + Fabric write path before
+   * the patient grant/PRE material has been prepared.
+   *
+   * This is disabled by default and ignored in production.
+   *
+   * @returns {boolean} True when the local bypass is enabled.
+   */
+  isClinicalAccessBypassEnabled() {
+    return process.env.NODE_ENV !== 'production'
+      && process.env.LOAD_TEST_BYPASS_CLINICAL_ACCESS === 'true';
+  }
+
+  /**
    * Verify a detached request signature with the actor public key.
    *
    * @param {Object} input - Signature verification input.
@@ -193,19 +206,28 @@ class ClinicalRecordOrchestrationService {
     // ============================================================================================== //
 
     // 5. Re-check the active write permission in blockchain.
-    const permission = normalizePermission(
-      await this.fabricPermissionRepository.getActivePermissionByPatientAndGrantee(
-        patientPseudoId,
-        professional.id
-      )
-    );
+    const permission = this.isClinicalAccessBypassEnabled()
+      ? {
+          permissionId: 'load-test-bypass',
+          allowedActions: ['read', 'write'],
+          allowedScopes: requestedScopes,
+          status: 'ACTIVE',
+        }
+      : normalizePermission(
+          await this.fabricPermissionRepository.getActivePermissionByPatientAndGrantee(
+            patientPseudoId,
+            professional.id
+          )
+        );
 
-    if (!permission || !isPermissionActive(permission)) {
-      throw createAppError('No active write access grant found for this patient and professional', 404);
-    }
+    if (!this.isClinicalAccessBypassEnabled()) {
+      if (!permission || !isPermissionActive(permission)) {
+        throw createAppError('No active write access grant found for this patient and professional', 404);
+      }
 
-    if (!permissionAllowsAction(permission, 'write')) {
-      throw createAppError('The active permission does not allow write access', 403);
+      if (!permissionAllowsAction(permission, 'write')) {
+        throw createAppError('The active permission does not allow write access', 403);
+      }
     }
 
     validateRequestedScopes(permission, requestedScopes);
@@ -331,6 +353,19 @@ class ClinicalRecordOrchestrationService {
    * @returns {Promise<Object>} Scope material resolution result.
    */
   async resolveScopeMaterialForRecord({ patientPseudoId, scopeId }) {
+    if (this.isClinicalAccessBypassEnabled()) {
+      return {
+        scopeMaterial: {
+          scopeMaterialId: 'load-test-bypass',
+          patientPseudoId,
+          scopeId,
+          status: 'ACTIVE',
+        },
+        scopeMaterialCreated: false,
+        scopeMaterialTxId: null,
+      };
+    }
+
     const existingScopeMaterial = normalizeScopeMaterial(
       await this.fabricClinicalRecordRepository.getScopeMaterialByPatientAndScope(patientPseudoId, scopeId)
     );
@@ -487,6 +522,17 @@ class ClinicalRecordOrchestrationService {
 
     // 2. Retrieve clinical references/indexes from the ledger for the patient
     const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexes(patientPseudoId);
+    console.log('[RNF-01] Patient on-chain clinical references', {
+      patientPseudoId,
+      references: references.map((reference) => ({
+        recordId: getRecordIdentifier(reference),
+        recordType: reference.recordType || null,
+        scopeId: reference.scopeId || reference.scope || null,
+        hash: reference.hash || null,
+        offchainUri: reference.offchainUri || null,
+        createdAt: reference.createdAt || null,
+      })),
+    });
 
     // ============================================================================================== //
 
@@ -586,10 +632,17 @@ class ClinicalRecordOrchestrationService {
     // ============================================================================================== //
 
     // 2. Resolve the active delegated permissions for the patient-professional pair.
-    const permissions = await this.fabricPermissionRepository.getActivePermissionsByPatientAndGrantee(
-      patientPseudoId,
-      professional.id
-    );
+    const permissions = this.isClinicalAccessBypassEnabled()
+      ? [{
+          permissionId: 'load-test-bypass',
+          allowedActions: ['read', 'write'],
+          allowedScopes: ['*'],
+          status: 'ACTIVE',
+        }]
+      : await this.fabricPermissionRepository.getActivePermissionsByPatientAndGrantee(
+          patientPseudoId,
+          professional.id
+        );
 
     const normalizedPermissions = normalizePermissions(permissions);
     if (normalizedPermissions.length === 0) {
@@ -661,14 +714,18 @@ class ClinicalRecordOrchestrationService {
     // ============================================================================================== //
 
     // 7. Retrieve ledger references using the professional audit context and
-    // the same scope/type filters enforced by the service layer.
-    const references = await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
-      patientPseudoId,
-      professionalId: professional.id,
-      professionalRole,
-      allowedScopes: authorizedRequestedScopes,
-      allowedRecordTypes: effectiveReadRecordTypes,
-    });
+    // the same scope/type filters enforced by the service layer. In local
+    // bypass mode the chaincode audit function cannot be used because it
+    // validates real on-chain permissions; use the patient index query instead.
+    const references = this.isClinicalAccessBypassEnabled()
+      ? await this.fabricClinicalRecordRepository.getPatientRecordIndexes(patientPseudoId)
+      : await this.fabricClinicalRecordRepository.getPatientRecordIndexesWithAudit({
+          patientPseudoId,
+          professionalId: professional.id,
+          professionalRole,
+          allowedScopes: authorizedRequestedScopes,
+          allowedRecordTypes: effectiveReadRecordTypes,
+        });
 
     // ============================================================================================== //
 
@@ -711,15 +768,30 @@ class ClinicalRecordOrchestrationService {
     // ============================================================================================== //
 
     // 12. Retrieve active ScopeMaterial entries for the authorized scopes.
-    const scopeMaterials = materialScopes.length
-      ? await this.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes(patientPseudoId, materialScopes)
-      : [];
+    const scopeMaterials = this.isClinicalAccessBypassEnabled()
+      ? []
+      : materialScopes.length
+        ? await this.fabricClinicalRecordRepository.getScopeMaterialsByPatientAndScopes(patientPseudoId, materialScopes)
+        : [];
     const scopeMaterialByScope = this.buildScopeMaterialMap(scopeMaterials);
 
     // ============================================================================================== //
 
     // 13. Transform each scope key for the professional and group records by scope.
     const scopes = await Promise.all(materialScopes.map(async (scopeId) => {
+      if (this.isClinicalAccessBypassEnabled()) {
+        return {
+          scopeId,
+          transformedScopeKey: 'load-test-bypass',
+          metadata: {
+            bypass: true,
+            reason: 'LOAD_TEST_BYPASS_CLINICAL_ACCESS',
+          },
+          scopeMaterialId: 'load-test-bypass',
+          records: mappedRecords.filter((record) => record.scopeId === scopeId),
+        };
+      }
+
       const scopeMaterial = scopeMaterialByScope.get(scopeId);
       if (!scopeMaterial?.encryptedScopeKey) {
         throw createAppError(`No active ScopeMaterial found for scope ${scopeId}`, 403);

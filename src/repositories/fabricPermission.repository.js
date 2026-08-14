@@ -1,4 +1,6 @@
+const { performance } = require('perf_hooks');
 const { getContract } = require('../config/fabric_gateway');
+const { recordFabricMetric } = require('../utils/fabricMetrics.utils');
 const {
   parseFabricResult,
   normalizeActivePermission,
@@ -35,8 +37,33 @@ class FabricPermissionRepository {
    */
   async submitTransaction(functionName, payload) {
     const contract = await this.getContractReference();
-    const resultBytes = await contract.submitTransaction(functionName, JSON.stringify(payload));
-    return parseFabricResult(resultBytes);
+    const startedAt = performance.now();
+
+    try {
+      const resultBytes = await contract.submitTransaction(functionName, JSON.stringify(payload));
+      const fabricConfirmationMs = performance.now() - startedAt;
+      const result = parseFabricResult(resultBytes);
+
+      void recordFabricMetric({
+        operation: functionName,
+        payload,
+        result,
+        fabricConfirmationMs,
+        status: 'SUCCESS',
+      });
+
+      return result;
+    } catch (error) {
+      void recordFabricMetric({
+        operation: functionName,
+        payload,
+        fabricConfirmationMs: performance.now() - startedAt,
+        status: 'ERROR',
+        errorMessage: error.message,
+      });
+
+      throw error;
+    }
   }
 
   /**

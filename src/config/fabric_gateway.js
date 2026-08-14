@@ -24,6 +24,16 @@ const CRYPTO_BASE = process.env.FABRIC_CRYPTO_BASE;
 const USER_MSP_PATH = process.env.FABRIC_USER_MSP_PATH;
 const TLS_CERT_PATH = process.env.FABRIC_TLS_CERT_PATH;
 
+function resolvePositiveIntegerEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const EVALUATE_TIMEOUT_MS = resolvePositiveIntegerEnv('FABRIC_EVALUATE_TIMEOUT_MS', 5000);
+const ENDORSE_TIMEOUT_MS = resolvePositiveIntegerEnv('FABRIC_ENDORSE_TIMEOUT_MS', 15000);
+const SUBMIT_TIMEOUT_MS = resolvePositiveIntegerEnv('FABRIC_SUBMIT_TIMEOUT_MS', 5000);
+const COMMIT_STATUS_TIMEOUT_MS = resolvePositiveIntegerEnv('FABRIC_COMMIT_STATUS_TIMEOUT_MS', 60000);
+
 /**
  * Cached singleton instances reused across the application lifecycle.
  */
@@ -132,10 +142,10 @@ async function initFabricGateway() {
     hash: hash.sha256,
     // Individual deadlines keep gateway operations bounded and prevent
     // requests from waiting indefinitely when the peer is unavailable.
-    evaluateOptions: () => ({ deadline: Date.now() + 5000 }),
-    endorseOptions: () => ({ deadline: Date.now() + 15000 }),
-    submitOptions: () => ({ deadline: Date.now() + 5000 }),
-    commitStatusOptions: () => ({ deadline: Date.now() + 60000 }),
+    evaluateOptions: () => ({ deadline: Date.now() + EVALUATE_TIMEOUT_MS }),
+    endorseOptions: () => ({ deadline: Date.now() + ENDORSE_TIMEOUT_MS }),
+    submitOptions: () => ({ deadline: Date.now() + SUBMIT_TIMEOUT_MS }),
+    commitStatusOptions: () => ({ deadline: Date.now() + COMMIT_STATUS_TIMEOUT_MS }),
   });
 
   network = gateway.getNetwork(CHANNEL_NAME);

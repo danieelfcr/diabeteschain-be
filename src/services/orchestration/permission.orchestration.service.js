@@ -144,6 +144,7 @@ class PermissionOrchestrationService {
     // 3. Resolve the PRE proxy nodes controlled by the backend for this grant.
     const selectedProxyNodes = await this.proxyNodeService.selectProxyNodesForGrant();
     const selectedProxyIds = selectedProxyNodes.map((node) => node.id);
+    console.log(selectedProxyIds);
 
     // ============================================================================================== //
 

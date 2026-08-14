@@ -1,0 +1,5 @@
+{
+  "ignore": [
+    "load-tests/results/*"
+  ]
+}
