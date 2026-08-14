@@ -193,18 +193,18 @@ class IdentityService {
   }
 
   /**
-   * Authenticate a user with email and password.
+   * Authenticate a user with an email address or username and password.
    *
    * @param {Object} credentials - The login credentials.
-   * @param {string} credentials.email - The user email address.
+   * @param {string} credentials.identifier - The user email address or username.
    * @param {string} credentials.password - The plaintext password.
    * @returns {Promise<Object>} The sanitized authenticated user.
    * @throws {Error} When authentication fails.
    */
   async loginUser(credentials) {
-    const { email, password } = credentials;
+    const { identifier, password } = credentials;
 
-    const user = await this.repository.findAuthUserByEmail(email);
+    const user = await this.repository.findAuthUserByIdentifier(identifier);
     if (!user) {
       throw createAppError('Invalid credentials', 401, 'AUTH_ERROR');
     }

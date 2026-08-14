@@ -321,6 +321,17 @@ describe('Identity routes integration', () => {
       expect(response.body.user.role).toBe('PATIENT');
     });
 
+    it('debe autenticar correctamente con el nombre de usuario', async () => {
+      await request(app).post('/auth/register').send(buildRegisterPayload());
+
+      const response = await request(app)
+        .post('/auth/login')
+        .send({ identifier: 'patient_user', password: 'StrongPassword123!' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.username).toBe('patient_user');
+    });
+
     it('debe retornar 401 si el email no existe', async () => {
       const response = await request(app)
         .post('/auth/login')

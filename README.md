@@ -188,10 +188,12 @@ Para `PATIENT`, el backend genera `pseudoId`.
 
 ```json
 {
-  "email": "patient@example.com",
+  "identifier": "patient@example.com",
   "password": "password-plano"
 }
 ```
+
+`identifier` acepta tanto el correo electrónico como el nombre de usuario.
 
 Respuesta relevante:
 

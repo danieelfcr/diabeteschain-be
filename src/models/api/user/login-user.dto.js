@@ -10,7 +10,7 @@ class LoginUserDTO {
    * @param {Object} payload - Raw request payload.
    */
   constructor(payload = {}) {
-    this.email = payload.email;
+    this.identifier = payload.identifier ?? payload.email;
     this.password = payload.password;
   }
 
@@ -18,7 +18,7 @@ class LoginUserDTO {
    * Validate and normalize the login payload.
    */
   validate() {
-    this.email = ensureNonEmptyString(this.email, 'email');
+    this.identifier = ensureNonEmptyString(this.identifier, 'identifier');
     this.password = ensureNonEmptyString(this.password, 'password', { trim: false });
   }
 

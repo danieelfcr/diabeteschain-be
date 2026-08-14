@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const {
   sequelize,
   User,
@@ -132,6 +133,27 @@ class IdentityRepository {
       return user;
     } catch (error) {
       throw new Error(`Error finding auth user by email: ${error.message}`);
+    }
+  }
+
+  /**
+   * Find an authenticated user by their email address or username, including
+   * role and status associations.
+   *
+   * @param {string} identifier - The email address or username used for authentication.
+   * @returns {Promise<Object|null>} The user record with associations, or null if none exists.
+   * @throws {Error} When query execution fails.
+   */
+  async findAuthUserByIdentifier(identifier) {
+    try {
+      return await User.findOne({
+        where: {
+          [Op.or]: [{ email: identifier }, { username: identifier }],
+        },
+        include: userProfileIncludes,
+      });
+    } catch (error) {
+      throw new Error(`Error finding auth user by identifier: ${error.message}`);
     }
   }
 

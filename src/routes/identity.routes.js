@@ -19,7 +19,7 @@ router.post(
 
 /**
  * POST /auth/login
- * Authenticate a user with email and password credentials.
+ * Authenticate a user with email-or-username and password credentials.
  */
 router.post(
   '/login',
